@@ -1,3 +1,5 @@
+import { App as CapApp } from '@capacitor/app';
+import { Capacitor, type PluginListenerHandle } from '@capacitor/core';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 export type TabId = 'start' | 'team' | 'liga' | 'buero' | 'menue';
@@ -19,7 +21,8 @@ const START: NavState = { screen: 'slots', tab: 'start', dialog: null };
  * Navigation, die mit dem Browser-Verlauf (History) verknüpft ist.
  * Dadurch funktioniert die Android-Zurück-Taste sinnvoll:
  * Sie schließt zuerst Dialoge und geht dann zur vorherigen Ansicht.
- * (Capacitor ruft auf Android history.back() auf; ist der Verlauf leer, wird die App beendet.)
+ * Im Browser macht das die Zurück-Taste des Browsers selbst, in der Android-App
+ * übernimmt der backButton-Handler weiter unten.
  */
 export function useNav() {
   const [nav, setNavState] = useState<NavState>(START);
@@ -39,6 +42,30 @@ export function useNav() {
     window.addEventListener('popstate', beiZurueck);
     return () => window.removeEventListener('popstate', beiZurueck);
   }, [setzen]);
+
+  // Android-Zurück-Taste (nur in der APK): Capacitor schließt sonst einfach die App.
+  // Hier: immer einen Schritt im Verlauf zurück (Dialog schließen, vorheriger Tab,
+  // Spielansicht -> Speicherplätze). Nur im Hauptmenü ohne Dialog wird die App beendet.
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+    let handle: PluginListenerHandle | undefined;
+    let aufgeraeumt = false;
+    void CapApp.addListener('backButton', () => {
+      const aktuell = navRef.current;
+      if (aktuell.screen === 'slots' && !aktuell.dialog) {
+        void CapApp.exitApp();
+      } else {
+        window.history.back();
+      }
+    }).then((h) => {
+      if (aufgeraeumt) void h.remove();
+      else handle = h;
+    });
+    return () => {
+      aufgeraeumt = true;
+      void handle?.remove();
+    };
+  }, []);
 
   /** Zu einer neuen Ansicht wechseln (neuer Verlaufseintrag). */
   const gehe = useCallback(
