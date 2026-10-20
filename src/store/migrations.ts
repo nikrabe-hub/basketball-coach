@@ -1,4 +1,6 @@
 import { CONFIG } from '../engine/config';
+import { generiereLiga } from '../engine/league';
+import type { Coach } from '../engine/types';
 import type { SaveRecord } from './types';
 
 /**
@@ -13,7 +15,20 @@ import type { SaveRecord } from './types';
 type Migration = (record: SaveRecord) => SaveRecord;
 
 export const MIGRATIONEN: Record<number, Migration> = {
-  // Noch keine – Version 1 ist das erste Format.
+  /**
+   * Format 1 -> 2 (Meilenstein 2): Spielstände bekommen eine Liga und ein Team.
+   * Alte Test-Spielstände aus Meilenstein 1 hatten nur Coach, Seed und Saison:
+   * Die Liga wird aus dem gespeicherten Seed erzeugt, der Coach übernimmt Team 0.
+   */
+  1: (record) => {
+    const alt = record.daten as unknown as { coach: Coach; seed: number; saison: number };
+    const liga = generiereLiga(alt.seed, CONFIG.saison.spieleOptionen[0]);
+    return {
+      ...record,
+      version: 2,
+      daten: { coach: alt.coach, seed: alt.seed, saison: alt.saison, liga, userTeamId: 0 },
+    };
+  },
 };
 
 /** Hebt einen Spielstand Schritt für Schritt auf die aktuelle Version. */

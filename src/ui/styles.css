@@ -300,3 +300,136 @@ button.slot {
   font-size: 1.2rem;
   margin-bottom: 14px;
 }
+
+/* ---------- Meilenstein 2: Werte, Tabellen, Teams, Spielerkarte ---------- */
+
+.w-top { color: #34e08f; }
+.w-gut { color: #8fe3a8; }
+.w-mittel { color: var(--text); }
+.w-schwach { color: var(--schlecht); }
+.fett { font-weight: 700; }
+
+.knopf.gross { width: 100%; flex: none; margin-top: 10px; }
+.knopf.abstand { width: 100%; margin-top: 10px; }
+.knopf { width: auto; }
+.karte > .knopf { width: 100%; }
+
+.zwischentitel { margin: 18px 0 8px; font-size: 1.05rem; }
+
+/* Auswahl-Schalter (Saisonlänge, Liga-Ansichten) */
+.auswahl { display: flex; gap: 8px; margin-bottom: 14px; }
+.wahl {
+  flex: 1;
+  min-height: 52px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  border: 1px solid var(--rand);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.wahl small { font-weight: 400; color: var(--text-leise); font-size: 0.7rem; }
+.wahl.aktiv { background: var(--akzent); color: var(--akzent-text); border-color: var(--akzent); }
+.wahl.aktiv small { color: var(--akzent-text); opacity: 0.8; }
+
+/* Sortierbare, wischbare Tabellen */
+.tabelle-box {
+  overflow-x: auto;
+  background: var(--bg-karte);
+  border: 1px solid var(--rand);
+  border-radius: var(--radius);
+  margin-bottom: 12px;
+  -webkit-overflow-scrolling: touch;
+}
+.tabelle { border-collapse: separate; border-spacing: 0; width: 100%; font-size: 0.92rem; white-space: nowrap; }
+.tabelle th, .tabelle td { padding: 11px 10px; text-align: left; border-bottom: 1px solid var(--rand); }
+.tabelle th { color: var(--text-leise); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; cursor: pointer; user-select: none; }
+.tabelle th.zahl, .tabelle td.zahl { text-align: right; }
+.tabelle .fix { position: sticky; left: 0; background: var(--bg-karte); z-index: 1; box-shadow: 1px 0 0 var(--rand); }
+.tabelle tbody tr:last-child td { border-bottom: 0; }
+.tabelle tr.klickbar { cursor: pointer; }
+.tabelle tr.klickbar:active td { background: var(--bg-karte-hell); }
+.tabelle tr.eigene td { background: var(--bg-karte-hell); }
+.tabelle .pfeil { color: var(--akzent); }
+
+/* Dialog: hohe Variante */
+.dialog-kopf { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
+.dialog-kopf h2 { margin: 0; }
+.dialog.gross { height: 92%; }
+.schliessen {
+  width: 44px; height: 44px; flex: none;
+  border-radius: 12px; border: 1px solid var(--rand);
+  background: var(--bg-karte-hell); color: var(--text);
+  font: inherit; font-size: 1.1rem; cursor: pointer;
+}
+
+/* Team-Steckbrief und Fakten */
+.teamkopf { display: flex; align-items: center; gap: 14px; margin-bottom: 12px; }
+.teamkopf div { display: flex; flex-direction: column; gap: 2px; }
+.teamkopf span { color: var(--text-leise); font-size: 0.88rem; }
+.fakten { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: 0.92rem; margin-bottom: 4px; }
+.fakten span:nth-child(odd) { color: var(--text-leise); }
+.kopf-team { display: flex; align-items: center; gap: 10px; }
+.logo-svg { flex: none; display: block; }
+.gegner { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+.gegner div { display: flex; flex-direction: column; }
+.gegner span { color: var(--text-leise); font-size: 0.85rem; }
+
+/* Teamwahl */
+.teamwahl { display: flex; flex-direction: column; height: 100%; }
+.teamkarte { padding: 0; overflow: hidden; }
+.teamkarte.offen { border-color: var(--akzent); }
+.teamkarte-kopf {
+  display: flex; align-items: center; gap: 12px; width: 100%;
+  padding: 12px 14px; min-height: 68px;
+  background: none; border: 0; color: inherit; font: inherit; text-align: left; cursor: pointer;
+}
+.teamkarte-text { display: flex; flex-direction: column; gap: 2px; }
+.teamkarte-text small { color: var(--text-leise); font-size: 0.8rem; }
+.teamkarte-detail { padding: 0 14px 14px; }
+.teamkarte-detail .knopf { width: 100%; }
+.aktionsleiste {
+  padding: 10px 16px calc(12px + env(safe-area-inset-bottom));
+  background: var(--bg-karte); border-top: 1px solid var(--rand);
+}
+.aktionsleiste .knopfreihe { margin-top: 0; }
+
+/* Liga: Teamliste und Spielplan */
+.divisionskarte h3 { margin: 0 0 6px; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-leise); }
+.teamzeile, .spielzeile {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  min-height: 48px; padding: 6px 4px;
+  background: none; border: 0; border-bottom: 1px solid var(--rand);
+  color: inherit; font: inherit; text-align: left; cursor: pointer;
+}
+.divisionskarte .teamzeile:last-child, .spielplan .spielzeile:last-child { border-bottom: 0; }
+.teamzeile.eigene { background: var(--bg-karte-hell); border-radius: 10px; }
+.teamzeile-name, .spielzeile-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.teamzeile-bilanz { color: var(--text-leise); font-variant-numeric: tabular-nums; }
+.spielplan { padding: 4px 12px; }
+.spielzeile-nr { width: 24px; color: var(--text-leise); font-size: 0.8rem; text-align: right; font-variant-numeric: tabular-nums; }
+.spielzeile-datum { width: 88px; font-size: 0.85rem; color: var(--text-leise); }
+.spielzeile-ha { width: 20px; text-align: center; color: var(--text-leise); }
+.slot-team { display: flex; align-items: center; gap: 8px; font-size: 0.95rem; }
+
+/* Spielerkarte */
+.sk-kopf { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.sk-name { flex: 1; display: flex; flex-direction: column; gap: 2px; font-size: 0.88rem; color: var(--text-leise); }
+.sk-name strong { font-size: 1.15rem; color: var(--text); }
+.sk-wertung { display: flex; flex-direction: column; align-items: center; min-width: 52px; }
+.sk-ovr { font-size: 2rem; font-weight: 800; line-height: 1; }
+.sk-label { font-size: 0.7rem; color: var(--text-leise); letter-spacing: 0.06em; }
+.sk-team { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.sk-block { background: var(--bg); border: 1px solid var(--rand); border-radius: var(--radius); padding: 10px 14px; margin-bottom: 10px; }
+.sk-block h3 { margin: 0 0 8px; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-leise); }
+.attr { display: grid; grid-template-columns: 9.5em 1fr 2.2em; align-items: center; gap: 8px; padding: 3px 0; font-size: 0.9rem; }
+.attr-balken { height: 8px; border-radius: 4px; background: var(--bg-karte-hell); overflow: hidden; }
+.attr-fuell { display: block; height: 100%; border-radius: 4px; background: currentColor; }
+.attr-wert { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+.pers { display: flex; justify-content: space-between; padding: 3px 0; font-size: 0.9rem; }
+.pers span:first-child { color: var(--text-leise); }

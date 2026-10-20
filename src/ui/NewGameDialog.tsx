@@ -1,15 +1,17 @@
 import { useState } from 'react';
+import { CONFIG } from '../engine/config';
 import { Dialog } from './Dialog';
 
 interface Props {
   slot: number;
-  onStart: (coachName: string, coachAlter: number) => void;
+  onWeiter: (coachName: string, coachAlter: number, saisonLaenge: number) => void;
   onAbbrechen: () => void;
 }
 
-export function NewGameDialog({ slot, onStart, onAbbrechen }: Props) {
+export function NewGameDialog({ slot, onWeiter, onAbbrechen }: Props) {
   const [name, setName] = useState('');
   const [alterText, setAlterText] = useState('40');
+  const [laenge, setLaenge] = useState<number>(CONFIG.saison.spieleOptionen[0]);
 
   const alter = Number(alterText);
   const nameOk = name.trim().length >= 2;
@@ -40,19 +42,30 @@ export function NewGameDialog({ slot, onStart, onAbbrechen }: Props) {
           onChange={(e) => setAlterText(e.target.value)}
         />
       </label>
-      <p className="hinweis">
-        Die Wahl des Startteams kommt mit dem Liga-Generator (Meilenstein 2).
-      </p>
+      <div className="feld">
+        <span>Länge der Saison (Spiele pro Team)</span>
+        <div className="auswahl" role="radiogroup" aria-label="Saisonlänge">
+          {CONFIG.saison.spieleOptionen.map((n) => (
+            <button
+              key={n}
+              type="button"
+              role="radio"
+              aria-checked={laenge === n}
+              className={laenge === n ? 'wahl aktiv' : 'wahl'}
+              onClick={() => setLaenge(n)}
+            >
+              {n}
+              <small>{n === 82 ? 'Standard' : n === 58 ? 'kürzer' : 'kurz'}</small>
+            </button>
+          ))}
+        </div>
+      </div>
       <div className="knopfreihe">
         <button className="knopf zweit" onClick={onAbbrechen}>
           Abbrechen
         </button>
-        <button
-          className="knopf"
-          disabled={!nameOk || !alterOk}
-          onClick={() => onStart(name.trim(), alter)}
-        >
-          Spiel starten
+        <button className="knopf" disabled={!nameOk || !alterOk} onClick={() => onWeiter(name.trim(), alter, laenge)}>
+          Weiter: Team wählen
         </button>
       </div>
     </Dialog>

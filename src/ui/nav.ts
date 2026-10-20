@@ -7,10 +7,12 @@ export type TabId = 'start' | 'team' | 'liga' | 'buero' | 'menue';
 export type DialogState =
   | { typ: 'neu'; slot: number }
   | { typ: 'loeschen'; slot: number }
+  | { typ: 'team'; teamId: number }
+  | { typ: 'spieler'; spielerId: number }
   | null;
 
 export interface NavState {
-  screen: 'slots' | 'game';
+  screen: 'slots' | 'teamwahl' | 'game';
   tab: TabId;
   dialog: DialogState;
 }

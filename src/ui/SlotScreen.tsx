@@ -1,4 +1,5 @@
 import type { SlotInfo } from '../store/types';
+import { TeamLogo } from './TeamLogo';
 
 interface Props {
   slots: SlotInfo[] | null;
@@ -35,6 +36,14 @@ export function SlotScreen({ slots, fehler, onNeu, onWeiter, onLoeschen }: Props
           <div key={s.slot} className="karte slot">
             <span className="slot-nr">Platz {s.slot}</span>
             <span className="slot-titel">Coach {s.coachName}</span>
+            {s.teamName && (
+              <span className="slot-team">
+                {s.teamKuerzel && s.teamFarbe1 && s.teamFarbe2 && (
+                  <TeamLogo kuerzel={s.teamKuerzel} farbe1={s.teamFarbe1} farbe2={s.teamFarbe2} groesse={24} />
+                )}
+                {s.teamName}
+              </span>
+            )}
             <span className="slot-info">
               Saison {s.saison}
               {s.geaendertAm ? ` · zuletzt ${datum(s.geaendertAm)}` : ''}

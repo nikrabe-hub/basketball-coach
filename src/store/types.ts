@@ -16,6 +16,11 @@ export interface SlotInfo {
   slot: number;
   leer: boolean;
   coachName?: string;
+  /** Name des Teams, z. B. "Harbor City Comets", plus Farben für das Logo */
+  teamName?: string;
+  teamKuerzel?: string;
+  teamFarbe1?: string;
+  teamFarbe2?: string;
   saison?: number;
   geaendertAm?: number;
 }

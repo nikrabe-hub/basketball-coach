@@ -20,12 +20,18 @@ export class SaveStore {
     const infos: SlotInfo[] = [];
     for (let slot = 1; slot <= CONFIG.saveSlots; slot++) {
       const rec = alle.find((r) => r.slot === slot);
+      // Spielstände im alten Format (ohne Liga) werden erst beim Laden migriert.
+      const team = rec?.daten.liga?.teams[rec.daten.userTeamId];
       infos.push(
         rec
           ? {
               slot,
               leer: false,
               coachName: rec.daten.coach.name,
+              teamName: team ? `${team.stadt} ${team.name}` : undefined,
+              teamKuerzel: team?.kuerzel,
+              teamFarbe1: team?.farbe1,
+              teamFarbe2: team?.farbe2,
               saison: rec.daten.saison,
               geaendertAm: rec.geaendertAm,
             }

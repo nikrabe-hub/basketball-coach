@@ -20,6 +20,22 @@ export class Rng {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   }
 
+  /** Kommazahl im Bereich [min, max) */
+  range(min: number, max: number): number {
+    return min + this.next() * (max - min);
+  }
+
+  /** Index nach Gewichten ziehen, z. B. gewichtet([55, 20, 8]) liefert 0, 1 oder 2 */
+  gewichtet(gewichte: readonly number[]): number {
+    const summe = gewichte.reduce((a, b) => a + b, 0);
+    let r = this.next() * summe;
+    for (let i = 0; i < gewichte.length; i++) {
+      r -= gewichte[i] as number;
+      if (r < 0) return i;
+    }
+    return gewichte.length - 1;
+  }
+
   /** Ganze Zahl von min bis max (beide inklusive) */
   int(min: number, max: number): number {
     return min + Math.floor(this.next() * (max - min + 1));
