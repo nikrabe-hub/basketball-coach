@@ -1,6 +1,7 @@
 import { CONFIG } from '../engine/config';
 import { generiereLiga } from '../engine/league';
-import type { Coach } from '../engine/types';
+import { leererStand } from '../engine/stats';
+import type { Coach, SpielDaten } from '../engine/types';
 import type { SaveRecord } from './types';
 
 /**
@@ -26,7 +27,37 @@ export const MIGRATIONEN: Record<number, Migration> = {
     return {
       ...record,
       version: 2,
-      daten: { coach: alt.coach, seed: alt.seed, saison: alt.saison, liga, userTeamId: 0 },
+      daten: {
+        coach: alt.coach,
+        seed: alt.seed,
+        saison: alt.saison,
+        liga,
+        userTeamId: 0,
+        einstellungen: { pbp: true },
+      },
+    };
+  },
+
+  /**
+   * Format 2 -> 3 (Meilenstein 3): Ergebnisse, Tabellen/Statistiken und Einstellungen.
+   * Alte Ligen haben noch kein Spiel gespielt (es gab keine Simulation): leere Tabellen.
+   */
+  2: (record) => {
+    const alt = record.daten as unknown as SpielDaten;
+    const liga = alt.liga;
+    return {
+      ...record,
+      version: 3,
+      daten: {
+        ...alt,
+        liga: {
+          ...liga,
+          tag: 0,
+          ergebnisse: [],
+          stand: leererStand(liga.teams.length),
+        },
+        einstellungen: { pbp: true },
+      },
     };
   },
 };

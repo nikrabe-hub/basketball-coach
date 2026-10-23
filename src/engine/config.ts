@@ -7,7 +7,7 @@
  */
 export const CONFIG = {
   /** Version des Spielstand-Formats. Bei jeder Änderung erhöhen + Migration schreiben. */
-  saveVersion: 2,
+  saveVersion: 3,
 
   /** Anzahl Speicherplätze */
   saveSlots: 3,
@@ -90,11 +90,116 @@ export const CONFIG = {
     },
   },
 
+  /** Spielsimulation (Meilenstein 3). Alle Zahlen sind Startwerte und werden mit dem Balancing-Skript abgestimmt. */
+  spiel: {
+    viertelSekunden: 720,
+    otSekunden: 300,
+    /**
+     * Wie stark Attribut-Unterschiede im Spiel wirken (1 = voll, kleiner = Spieler rücken näher
+     * zusammen). Der wichtigste Regler für den Abstand zwischen starken und schwachen Teams.
+     */
+    attributWirkung: 0.35,
+    /** Skaliert alle Ballbesitz-Dauern (größer = langsamer = weniger Ballbesitze) */
+    tempoFaktor: 1.08,
+    /** Dauer eines Ballbesitzes je Spielzug: [Mittel, Streuung] in Sekunden */
+    dauer: {
+      iso: [16.5, 4],
+      pnr: [15, 4],
+      post: [15.5, 4],
+      spot: [11, 4],
+      drive: [12.5, 4],
+      fast: [6.5, 2],
+      putback: [4.5, 1.5],
+    } as const,
+    /** Grundhäufigkeit der Spielzüge */
+    zugGewichte: { iso: 0.12, pnr: 0.28, post: 0.08, spot: 0.22, drive: 0.2 } as const,
+    /** Wer wirft? Gewicht = (Offensivwert / 60) ^ Exponent */
+    nutzungExponent: 0.45,
+    /** Wurfzonen [Ring, Mitteldistanz, Dreier]: Grundanteile und wie stark Attribute sie verschieben */
+    zonenBasis: [0.32, 0.18, 0.5] as const,
+    zonenSkala: 22,
+    /** Trefferwahrscheinlichkeit je Zone [Ring, Mitteldistanz, Dreier] bei Attribut 60 gegen Verteidiger 55 */
+    treffer: {
+      basis: [0.61, 0.415, 0.36] as const,
+      angriffProPunkt: [0.0035, 0.003, 0.0035] as const,
+      abwehrProPunkt: [0.0028, 0.0022, 0.0025] as const,
+      /** Hilfe-Verteidigung am Ring: Wirkung pro Punkt Innen-Defense der übrigen Verteidiger */
+      hilfeProPunkt: 0.0012,
+      /** Bonus für freie Würfe (Spot-Up, Kick-out) */
+      frei: 0.02,
+      /** Bonus pro Punkt Spiel-IQ über 60 */
+      iqProPunkt: 0.0008,
+      min: 0.15,
+      max: 0.85,
+    },
+    heimvorteil: 0.02,
+    /** Trefferchance sinkt pro Punkt eigenen Vorsprungs um diesen Wert (Rückstand: steigt) */
+    ausgleich: 0.0027,
+    ausgleichMaxAbstand: 30,
+    turnover: { basis: 0.14, proPunkt: 0.0015, min: 0.07, max: 0.2, stealAnteil: 0.58, offensivfoulAnteil: 0.1, fastbreak: 0.07 },
+    /** Foul des Verteidigers vor dem Wurf (ohne Freiwürfe, außer im Bonus) */
+    foulOhneWurf: 0.1,
+    /** Foul beim Wurf je Zone [Ring, Mitteldistanz, Dreier] */
+    foulBeimWurf: [0.14, 0.06, 0.025] as const,
+    /** Teamfouls pro Viertel ab denen jedes Foul zwei Freiwürfe bringt */
+    bonusAb: 5,
+    ausgefoult: 6,
+    blockBasis: [0.11, 0.05, 0.012] as const,
+    freiwurf: { basis: 0.62, proPunkt: 0.0058 },
+    /** Wahrscheinlichkeit eines Assists nach getroffenem Wurf je Spielzug */
+    assistFaktor: 1.12,
+    assist: { iso: 0.18, pnrHandler: 0.55, pnrRoller: 0.92, post: 0.45, spot: 0.97, driveRim: 0.55, driveKick: 0.97, fast: 0.8 } as const,
+    rebound: { offensivBasis: 0.27, freiwurfFaktor: 0.55, blockFaktor: 0.8, min: 0.1, max: 0.45, teamAnteil: 0.1 },
+    fastbreak: { nachSteal: 0.45, nachRebound: 0.1 },
+    /** Müdigkeit: Energie 0..100 */
+    muedigkeit: {
+      verbrauchProSek: 0.065,
+      ausdauerReferenz: 75,
+      erholungProSek: 0.03,
+      erholungViertel: 6,
+      erholungHalbzeit: 18,
+      /** So viele Attributpunkte kostet jeder fehlende Energiepunkt */
+      attributProPunkt: 0.25,
+      /** So viele Rotations-Wertungspunkte kostet jeder fehlende Energiepunkt */
+      wertungProPunkt: 0.5,
+    },
+    rotation: {
+      /** Rotationswert = 100 minus Rang im Kader mal diesen Wert, minus Müdigkeit */
+      rangSchritt: 3.2,
+      /** Mindestzeit auf dem Feld, bevor ein Wechsel erlaubt ist (Sekunden) */
+      minEinsatz: 120,
+      /** Wer schon auf dem Feld steht, bekommt diesen Bonus (verhindert Hin und Her) */
+      traegheit: 2.5,
+      /** Abzug für die Rangplätze 9–10 und ab 11 im Kader (nach OVR) */
+      abzugRang9: 3,
+      abzugRang11: 10,
+      foulProblem5: 6,
+      /** Garbage Time: Abstand und Restzeit im letzten Viertel, Abzug für die Starter */
+      garbageAbstand: 22,
+      garbageSekunden: 420,
+      garbageStarterAbzug: 25,
+    },
+  },
+
   /** Zielwerte für das Balancing-Skript (ungefähr modernes NBA-Niveau) */
   ziele: {
-    ballbesitzeProTeamUndSpiel: 100,
-    punkteProTeamUndSpiel: { min: 110, max: 115 },
+    ballbesitzeProTeamUndSpiel: { min: 96, max: 104 },
+    punkteProTeamUndSpiel: { min: 108, max: 116 },
+    fgQuote: { min: 0.44, max: 0.49 },
+    dreierQuote: { min: 0.34, max: 0.38 },
     dreierAnteilAnWuerfen: { min: 0.34, max: 0.42 },
+    freiwurfQuote: { min: 0.74, max: 0.8 },
+    freiwurfVersucheProTeam: { min: 18, max: 25 },
+    reboundsProTeam: { min: 41, max: 47 },
+    assistsProTeam: { min: 23, max: 28 },
+    turnoversProTeam: { min: 12, max: 15 },
+    foulsProTeam: { min: 18, max: 22 },
+    heimsiegQuote: { min: 0.55, max: 0.62 },
+    /** Siege des besten und schlechtesten Teams, hochgerechnet auf 82 Spiele */
+    besteBilanz: { min: 58, max: 70 },
+    schlechtesteBilanz: { min: 13, max: 26 },
+    /** Beste Punkteschnitte pro Spiel */
+    topScorer: { min: 24, max: 35 },
   },
 
   finanzen: {

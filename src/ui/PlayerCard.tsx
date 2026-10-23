@@ -1,7 +1,8 @@
 import { ATTRIBUT_GRUPPEN, ATTRIBUT_INFO, PERSOENLICHKEIT_INFO } from '../engine/player';
+import { proSpiel, quote } from '../engine/stats';
 import { teamName } from '../engine/teams';
 import type { Liga, Spieler, Team } from '../engine/types';
-import { fmtGeld, wertKlasse, wertWort } from './format';
+import { fmt1, fmtGeld, fmtProz, wertKlasse, wertWort } from './format';
 import { TeamLogo } from './TeamLogo';
 
 interface Props {
@@ -49,6 +50,8 @@ export function PlayerCard({ spieler: s, liga }: Props) {
         </p>
       </div>
 
+      <StatistikBlock spieler={s} liga={liga} />
+
       {ATTRIBUT_GRUPPEN.map((gruppe) => (
         <div className="sk-block" key={gruppe}>
           <h3>{gruppe}</h3>
@@ -76,6 +79,44 @@ export function PlayerCard({ spieler: s, liga }: Props) {
           </div>
         ))}
         <p className="hinweis">Aktionen wie Trade, Vertragsverlängerung und Entlassung kommen in späteren Meilensteinen.</p>
+      </div>
+    </div>
+  );
+}
+
+/** Saison-Statistik pro Spiel; vor dem ersten Einsatz ein Hinweis. */
+function StatistikBlock({ spieler, liga }: { spieler: Spieler; liga: Liga }) {
+  const v = liga.stand.spieler[String(spieler.id)];
+  if (!v || v.spiele === 0) {
+    return (
+      <div className="sk-block">
+        <h3>Statistik (laufende Saison)</h3>
+        <p className="hinweis">Noch kein Einsatz in dieser Saison.</p>
+      </div>
+    );
+  }
+  const feld = (label: string, wert: string) => (
+    <div className="stat-feld" key={label}>
+      <strong>{wert}</strong>
+      <span>{label}</span>
+    </div>
+  );
+  return (
+    <div className="sk-block">
+      <h3>Statistik (laufende Saison, pro Spiel)</h3>
+      <div className="stat-raster">
+        {feld('Spiele', String(v.spiele))}
+        {feld('Min', fmt1(proSpiel(v, v.min / 60)))}
+        {feld('Punkte', fmt1(proSpiel(v, v.pts)))}
+        {feld('Rebounds', fmt1(proSpiel(v, v.reb)))}
+        {feld('Assists', fmt1(proSpiel(v, v.ast)))}
+        {feld('Steals', fmt1(proSpiel(v, v.stl)))}
+        {feld('Blocks', fmt1(proSpiel(v, v.blk)))}
+        {feld('Turnovers', fmt1(proSpiel(v, v.to)))}
+        {feld('FG %', fmtProz(quote(v.fgm, v.fga)))}
+        {feld('3P %', fmtProz(quote(v.tpm, v.tpa)))}
+        {feld('FT %', fmtProz(quote(v.ftm, v.fta)))}
+        {feld('+/-', fmt1(proSpiel(v, v.pm)))}
       </div>
     </div>
   );

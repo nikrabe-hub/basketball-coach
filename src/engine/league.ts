@@ -3,6 +3,7 @@ import { NamenGenerator } from './names';
 import { begrenze, erzeugeSpieler } from './player';
 import { Rng } from './rng';
 import { erzeugeSpielplan } from './schedule';
+import { leererStand } from './stats';
 import { erzeugeTeams } from './teams';
 import { POSITIONEN, type Liga, type Position, type Spieler, type Team } from './types';
 
@@ -79,7 +80,7 @@ export function generiereLiga(seed: number, saisonLaenge: number): Liga {
   }
 
   const spielplan = erzeugeSpielplan(rng, teams, saisonLaenge);
-  return { seed, saisonLaenge, teams, spieler, spielplan, tag: 0 };
+  return { seed, saisonLaenge, teams, spieler, spielplan, tag: 0, ergebnisse: [], stand: leererStand(teams.length) };
 }
 
 // ---------- Auswertungen (nur lesen, nichts verändern) ----------

@@ -105,6 +105,106 @@ export interface Spiel {
   gast: number;
 }
 
+// ---------- Ergebnisse & Statistik (ab Meilenstein 3) ----------
+
+/**
+ * Eine Boxscore-Zeile eines Spielers. Als Zahlenliste gespeichert (statt Objekt),
+ * damit der Spielstand klein bleibt. Zugriff über die Indizes in `BX` (stats.ts).
+ * Reihenfolge: id, Spielzeit in Sekunden, Punkte, Rebounds, Off.-Rebounds, Assists,
+ * Steals, Blocks, Turnovers, Fouls, FG getroffen/versucht, 3P getroffen/versucht,
+ * FT getroffen/versucht, Plus/Minus, Starter (1/0).
+ */
+export type BoxZeile = [
+  id: number,
+  min: number,
+  pts: number,
+  reb: number,
+  oreb: number,
+  ast: number,
+  stl: number,
+  blk: number,
+  to: number,
+  pf: number,
+  fgm: number,
+  fga: number,
+  tpm: number,
+  tpa: number,
+  ftm: number,
+  fta: number,
+  pm: number,
+  start: number,
+];
+
+export interface TeamBox {
+  teamId: number;
+  punkte: number;
+  /** Punkte je Viertel, Overtimes hinten angehängt */
+  viertel: number[];
+  spieler: BoxZeile[];
+}
+
+export interface SpielErgebnis {
+  tag: number;
+  heim: TeamBox;
+  gast: TeamBox;
+  /** Anzahl Verlängerungen (0 = keine) */
+  ot: number;
+  /** Kurze Spielzusammenfassung */
+  text: string;
+  /** Play-by-Play (nur für eigene Spiele und nur wenn eingeschaltet) */
+  pbp?: string[];
+}
+
+/** Saisonbilanz eines Teams. */
+export interface TeamBilanz {
+  siege: number;
+  niederlagen: number;
+  heimSiege: number;
+  heimNiederlagen: number;
+  auswSiege: number;
+  auswNiederlagen: number;
+  divSiege: number;
+  divNiederlagen: number;
+  confSiege: number;
+  confNiederlagen: number;
+  punkteFuer: number;
+  punkteGegen: number;
+  /** Positiv = Siegesserie, negativ = Niederlagenserie */
+  serie: number;
+  /** Letzte Spiele, neueste zuletzt: 1 = Sieg, 0 = Niederlage */
+  letzte: number[];
+}
+
+/** Saison-Summen eines Spielers (Spielzeit in Sekunden). */
+export interface SpielerSumme {
+  spiele: number;
+  starts: number;
+  min: number;
+  pts: number;
+  reb: number;
+  oreb: number;
+  ast: number;
+  stl: number;
+  blk: number;
+  to: number;
+  pf: number;
+  fgm: number;
+  fga: number;
+  tpm: number;
+  tpa: number;
+  ftm: number;
+  fta: number;
+  pm: number;
+}
+
+/** Laufende Tabellen und Statistiken der aktuellen Saison. */
+export interface Saisonstand {
+  /** Index = Team-ID */
+  teams: TeamBilanz[];
+  /** Schlüssel = Spieler-ID (als Text) */
+  spieler: Record<string, SpielerSumme>;
+}
+
 export interface Liga {
   seed: number;
   /** Spiele pro Team in der Hauptrunde: 82, 58 oder 29 */
@@ -115,6 +215,9 @@ export interface Liga {
   spielplan: Spiel[][];
   /** Aktueller Kalendertag (0-basiert): der nächste noch nicht gespielte Tag */
   tag: number;
+  /** ergebnisse[tag][i] gehört zu spielplan[tag][i]; nur für schon gespielte Tage vorhanden */
+  ergebnisse: SpielErgebnis[][];
+  stand: Saisonstand;
 }
 
 // ---------- Spielstand ----------
@@ -129,6 +232,12 @@ export interface SpielDaten {
   liga: Liga;
   /** Das Team des Spielers (Index in liga.teams) */
   userTeamId: number;
+  einstellungen: Einstellungen;
+}
+
+export interface Einstellungen {
+  /** Play-by-Play-Ticker für die eigenen Spiele speichern (kostet etwas Speicherplatz) */
+  pbp: boolean;
 }
 
 export function neuesSpiel(
@@ -144,5 +253,6 @@ export function neuesSpiel(
     saison: 1,
     liga,
     userTeamId,
+    einstellungen: { pbp: true },
   };
 }

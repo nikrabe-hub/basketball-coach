@@ -83,3 +83,16 @@ function hashString(text: string): number {
 export function neuerSeed(): number {
   return Math.floor(Math.random() * 0xffffffff) >>> 0;
 }
+
+/** Mischt mehrere Zahlen zu einem Seed. Gleiche Eingabe => gleicher Seed (für reproduzierbare Spiele). */
+export function mischeSeed(...zahlen: number[]): number {
+  let h = 2166136261;
+  for (const z of zahlen) {
+    h ^= z >>> 0;
+    h = Math.imul(h, 16777619);
+    h ^= h >>> 15;
+    h = Math.imul(h, 2246822519);
+    h ^= h >>> 13;
+  }
+  return h >>> 0;
+}

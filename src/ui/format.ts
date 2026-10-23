@@ -35,3 +35,31 @@ export function lesbareTextfarbe(hex: string): string {
   const hell = 0.2126 * r + 0.7152 * g + 0.0722 * b;
   return hell > 0.55 ? '#111111' : '#ffffff';
 }
+
+/** Spielzeit in Sekunden -> "34:12" */
+export function fmtMin(sek: number): string {
+  const m = Math.floor(sek / 60);
+  const s = Math.round(sek - m * 60);
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+/** Kommazahl mit einer Nachkommastelle: 12.34 -> "12,3" */
+export function fmt1(x: number): string {
+  return x.toFixed(1).replace('.', ',');
+}
+
+/** Quote 0..1 als Prozentzahl mit Komma: 0.4634 -> "46,3" */
+export function fmtProz(q: number): string {
+  return fmt1(q * 100);
+}
+
+/** Mit Vorzeichen: 3 -> "+3", -2.5 -> "-2,5" (bei 0 ohne Vorzeichen) */
+export function fmtPlus(x: number, nachkomma = 0): string {
+  const t = Math.abs(x).toFixed(nachkomma).replace('.', ',');
+  return x > 0 ? `+${t}` : x < 0 ? `-${t}` : t;
+}
+
+/** CSS-Klasse für Plus/Minus-Werte */
+export function plusKlasse(x: number): string {
+  return x > 0 ? 'w-gut' : x < 0 ? 'w-schwach' : '';
+}

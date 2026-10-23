@@ -5,6 +5,7 @@ import { teamName } from '../engine/teams';
 import { neuesSpiel, type Liga, type SpielDaten } from '../engine/types';
 import { saveStore } from '../store/saves';
 import type { SlotInfo } from '../store/types';
+import { BoxscoreView } from './BoxscoreView';
 import { Dialog } from './Dialog';
 import { lesbareTextfarbe } from './format';
 import { GameScreen } from './GameScreen';
@@ -143,8 +144,10 @@ export function App() {
   /** Änderung am Spielstand übernehmen und sofort speichern (Autosave). */
   const aendereSpiel = async (neu: SpielDaten) => {
     if (aktiverSlot === null) return;
-    await saveStore.speichern(aktiverSlot, neu);
+    // Erst anzeigen, dann speichern: Schalter und Ergebnisse reagieren sofort.
+    // Schlägt das Speichern fehl, gibt die Funktion den Fehler weiter (Anzeige beim Aufrufer).
     setSpiel(neu);
+    await saveStore.speichern(aktiverSlot, neu);
   };
 
   const liga: Liga | undefined = nav.screen === 'teamwahl' ? entwurf?.liga : spiel?.liga;
@@ -164,6 +167,7 @@ export function App() {
         onZuDenSlots={() => gehe({ screen: 'slots', tab: 'start', dialog: null })}
         onTeam={ansehenTeam}
         onSpieler={ansehenSpieler}
+        onBox={(tag, index) => gehe({ dialog: { typ: 'box', tag, index } })}
       />
     );
   } else if (nav.screen === 'teamwahl' && entwurf) {
@@ -218,6 +222,17 @@ export function App() {
       {dialog?.typ === 'team' && liga?.teams[dialog.teamId] && (
         <Dialog titel={teamName(liga.teams[dialog.teamId]!)} onSchliessen={schliesseDialog} gross>
           <TeamView liga={liga} teamId={dialog.teamId} onSpieler={ansehenSpieler} />
+        </Dialog>
+      )}
+
+      {dialog?.typ === 'box' && liga?.ergebnisse[dialog.tag]?.[dialog.index] && spiel && (
+        <Dialog titel="Boxscore" onSchliessen={schliesseDialog} gross>
+          <BoxscoreView
+            liga={liga}
+            erg={liga.ergebnisse[dialog.tag]![dialog.index]!}
+            saison={spiel.saison}
+            onSpieler={ansehenSpieler}
+          />
         </Dialog>
       )}
 

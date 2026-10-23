@@ -69,7 +69,7 @@ describe('SaveStore', () => {
     await expect(store.speichern(1, spiel('A'))).rejects.toThrow();
   });
 
-  it('hebt einen alten Spielstand (Format 1) beim Laden automatisch auf Format 2', async () => {
+  it('hebt einen alten Spielstand (Format 1) beim Laden automatisch auf die aktuelle Version', async () => {
     const alt = {
       slot: 1,
       version: 1,
@@ -84,14 +84,32 @@ describe('SaveStore', () => {
     expect(slots[0]).toMatchObject({ leer: false, coachName: 'Alt', saison: 3 });
 
     const geladen = await store.laden(1);
-    expect(geladen?.version).toBe(2);
+    expect(geladen?.version).toBe(CONFIG.saveVersion);
     expect(geladen?.daten.coach.name).toBe('Alt');
     expect(geladen?.daten.saison).toBe(3);
     expect(geladen?.daten.userTeamId).toBe(0);
     expect(geladen?.daten.liga.teams).toHaveLength(30);
 
     // Und wurde dauerhaft gespeichert:
-    expect((await db.saves.get(1))?.version).toBe(2);
+    expect((await db.saves.get(1))?.version).toBe(CONFIG.saveVersion);
+  });
+
+  it('hebt einen Spielstand aus Meilenstein 2 (Format 2) auf Format 3: leere Tabellen und Einstellungen', async () => {
+    const m2 = structuredClone(spiel('Zwei')) as unknown as Record<string, unknown>;
+    const ligaAlt = structuredClone(liga) as unknown as Record<string, unknown>;
+    delete ligaAlt.ergebnisse;
+    delete ligaAlt.stand;
+    m2.liga = ligaAlt;
+    delete m2.einstellungen;
+    await db.saves.put({ slot: 2, version: 2, erstelltAm: 1, geaendertAm: 2, daten: m2 } as unknown as SaveRecord);
+
+    const geladen = await store.laden(2);
+    expect(geladen?.version).toBe(3);
+    expect(geladen?.daten.einstellungen).toEqual({ pbp: true });
+    expect(geladen?.daten.liga.ergebnisse).toEqual([]);
+    expect(geladen?.daten.liga.stand.teams).toHaveLength(30);
+    expect(geladen?.daten.liga.stand.teams[0]?.siege).toBe(0);
+    expect(geladen?.daten.liga.teams).toHaveLength(30);
   });
 });
 

@@ -1,12 +1,28 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CONFIG } from '../engine/config';
 import { gehaltSumme, staerkeRang, teamStaerke } from '../engine/league';
 import { formatDatum, spieleVonTeam } from '../engine/schedule';
+import {
+  deadlineTag,
+  eigeneErgebnisse,
+  hauptrundeVorbei,
+  naechsterEigenerSpieltag,
+  spielIndex,
+  zielTag,
+  ZIEL_TEXT,
+  type SimulationsZiel,
+} from '../engine/season';
+import { serieText, siegQuote, sortiereTabelle, spiele } from '../engine/stats';
 import { CONFERENCES, DIVISIONEN, teamName } from '../engine/teams';
-import type { SpielDaten, Team } from '../engine/types';
+import type { Liga, SpielDaten, SpielErgebnis, Team } from '../engine/types';
+import { ErgebnisseView } from './ErgebnisseView';
 import { fmtGeld } from './format';
 import { KaderTabelle } from './KaderTabelle';
 import type { TabId } from './nav';
+import { AbbruchFehler, simuliereImHintergrund, type Lauf } from './simulation';
+import { SimOverlay } from './SimOverlay';
+import { StatistikView } from './StatistikView';
+import { TabelleView } from './TabelleView';
 import { TeamLogo } from './TeamLogo';
 
 interface Props {
@@ -18,6 +34,7 @@ interface Props {
   onZuDenSlots: () => void;
   onTeam: (teamId: number) => void;
   onSpieler: (spielerId: number) => void;
+  onBox: (tag: number, index: number) => void;
 }
 
 const TABS: { id: TabId; label: string; icon: string }[] = [
@@ -28,8 +45,32 @@ const TABS: { id: TabId; label: string; icon: string }[] = [
   { id: 'menue', label: 'Menü', icon: '☰' },
 ];
 
-export function GameScreen({ slot, spiel, tab, onTab, onAendern, onZuDenSlots, onTeam, onSpieler }: Props) {
+export function GameScreen({ slot, spiel, tab, onTab, onAendern, onZuDenSlots, onTeam, onSpieler, onBox }: Props) {
   const eigenesTeam = spiel.liga.teams[spiel.userTeamId] as Team;
+  const [sim, setSim] = useState<{ titel: string; fertig: number; gesamt: number } | null>(null);
+  const [simFehler, setSimFehler] = useState<string | null>(null);
+  const lauf = useRef<Lauf | null>(null);
+
+  // Verlässt man das Spiel mitten in der Simulation, wird sie abgebrochen (Spielstand bleibt unverändert).
+  useEffect(() => () => lauf.current?.abbrechen(), []);
+
+  const simuliere = async (ziel: SimulationsZiel) => {
+    const bis = zielTag(spiel, ziel);
+    if (bis === null || lauf.current) return;
+    setSimFehler(null);
+    setSim({ titel: ZIEL_TEXT[ziel], fertig: 0, gesamt: bis - spiel.liga.tag });
+    const l = simuliereImHintergrund(spiel, bis, (fertig, gesamt) => setSim((s) => (s ? { ...s, fertig, gesamt } : s)));
+    lauf.current = l;
+    try {
+      const neu = await l.ergebnis;
+      await onAendern(neu);
+    } catch (e) {
+      if (!(e instanceof AbbruchFehler)) setSimFehler(`Simulation oder Speichern fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      lauf.current = null;
+      setSim(null);
+    }
+  };
 
   return (
     <div className="spiel">
@@ -39,14 +80,27 @@ export function GameScreen({ slot, spiel, tab, onTab, onAendern, onZuDenSlots, o
           <strong>Coach {spiel.coach.name}</strong>
         </span>
         <span>
-          Saison {spiel.saison} · Tag {spiel.liga.tag + 1}
+          Saison {spiel.saison} ·{' '}
+          {hauptrundeVorbei(spiel.liga)
+            ? 'Hauptrunde beendet'
+            : formatDatum(spiel.saison, spiel.liga.tag)}
         </span>
       </header>
 
       <main className="seite">
-        {tab === 'start' && <StartTab spiel={spiel} eigenesTeam={eigenesTeam} onTab={onTab} />}
+        {tab === 'start' && (
+          <StartTab
+            spiel={spiel}
+            eigenesTeam={eigenesTeam}
+            onTab={onTab}
+            onSimuliere={(z) => void simuliere(z)}
+            laeuft={sim !== null}
+            fehler={simFehler}
+            onBox={onBox}
+          />
+        )}
         {tab === 'team' && <TeamTab spiel={spiel} eigenesTeam={eigenesTeam} onSpieler={onSpieler} />}
-        {tab === 'liga' && <LigaTab spiel={spiel} onTeam={onTeam} />}
+        {tab === 'liga' && <LigaTab spiel={spiel} onTeam={onTeam} onSpieler={onSpieler} onBox={onBox} />}
         {tab === 'buero' && (
           <Platzhalter
             titel="Büro"
@@ -74,18 +128,84 @@ export function GameScreen({ slot, spiel, tab, onTab, onAendern, onZuDenSlots, o
           </button>
         ))}
       </nav>
+
+      {sim && (
+        <SimOverlay titel={sim.titel} fertig={sim.fertig} gesamt={sim.gesamt} onAbbrechen={() => lauf.current?.abbrechen()} />
+      )}
     </div>
   );
 }
 
 // ---------- Start ----------
 
-function StartTab({ spiel, eigenesTeam, onTab }: { spiel: SpielDaten; eigenesTeam: Team; onTab: (t: TabId) => void }) {
+/** Platz des Teams in seiner Conference (1 = Erster). */
+function conferencePlatz(liga: Liga, teamId: number): number {
+  const team = liga.teams[teamId] as Team;
+  const ids = liga.teams.filter((t) => t.conference === team.conference).map((t) => t.id);
+  return sortiereTabelle(liga, ids).indexOf(teamId) + 1;
+}
+
+function Ergebniszeile({
+  erg,
+  liga,
+  eigenesTeamId,
+  index,
+  onBox,
+}: {
+  erg: SpielErgebnis;
+  liga: Liga;
+  eigenesTeamId: number;
+  index: number;
+  onBox: (tag: number, index: number) => void;
+}) {
+  const zuHause = erg.heim.teamId === eigenesTeamId;
+  const eigene = zuHause ? erg.heim : erg.gast;
+  const gegnerBox = zuHause ? erg.gast : erg.heim;
+  const gegner = liga.teams[gegnerBox.teamId] as Team;
+  const gewonnen = eigene.punkte > gegnerBox.punkte;
+  return (
+    <button className="spielzeile" onClick={() => onBox(erg.tag, index)}>
+      <span className={gewonnen ? 'ergebnis-badge sieg' : 'ergebnis-badge niederlage'}>{gewonnen ? 'S' : 'N'}</span>
+      <span className="spielzeile-ha">{zuHause ? 'vs' : '@'}</span>
+      <TeamLogo kuerzel={gegner.kuerzel} farbe1={gegner.farbe1} farbe2={gegner.farbe2} groesse={26} />
+      <span className="spielzeile-name">{gegner.name}</span>
+      <span className="erg-endstand">
+        {eigene.punkte}:{gegnerBox.punkte}
+        {erg.ot > 0 ? ` n.V.` : ''}
+      </span>
+    </button>
+  );
+}
+
+function StartTab({
+  spiel,
+  eigenesTeam,
+  onTab,
+  onSimuliere,
+  laeuft,
+  fehler,
+  onBox,
+}: {
+  spiel: SpielDaten;
+  eigenesTeam: Team;
+  onTab: (t: TabId) => void;
+  onSimuliere: (z: SimulationsZiel) => void;
+  laeuft: boolean;
+  fehler: string | null;
+  onBox: (tag: number, index: number) => void;
+}) {
   const { liga } = spiel;
-  const spiele = spieleVonTeam(liga.spielplan, eigenesTeam.id);
-  const naechstes = spiele.find((s) => s.tag >= liga.tag);
+  const alleSpiele = spieleVonTeam(liga.spielplan, eigenesTeam.id);
+  const naechstes = alleSpiele.find((s) => s.tag >= liga.tag);
   const gegner = naechstes ? (liga.teams[naechstes.gegner] as Team) : undefined;
   const rang = staerkeRang(liga, eigenesTeam.id);
+  const b = liga.stand.teams[eigenesTeam.id]!;
+  const gespielt = spiele(b);
+  const vorbei = hauptrundeVorbei(liga);
+  const deadline = deadlineTag(liga);
+  const deadlineOffen = zielTag(spiel, 'deadline') !== null;
+  const letzte = eigeneErgebnisse(spiel).slice(-5).reverse();
+  const platz = conferencePlatz(liga, eigenesTeam.id);
 
   return (
     <>
@@ -96,18 +216,30 @@ function StartTab({ spiel, eigenesTeam, onTab }: { spiel: SpielDaten; eigenesTea
           <div>
             <strong>{teamName(eigenesTeam)}</strong>
             <span>
-              {CONFERENCES[eigenesTeam.conference]} · {DIVISIONEN[eigenesTeam.division]} · Bilanz 0–0
+              {CONFERENCES[eigenesTeam.conference]} · {DIVISIONEN[eigenesTeam.division]} · Bilanz {b.siege}–{b.niederlagen}
             </span>
             <span>
-              Stärke Platz {rang} von {liga.teams.length}
+              {gespielt === 0
+                ? `Stärke Platz ${rang} von ${liga.teams.length}`
+                : `Platz ${platz} im ${CONFERENCES[eigenesTeam.conference]} · ${(siegQuote(b) * 100).toFixed(0)} % · Serie ${serieText(b)}`}
             </span>
           </div>
         </div>
       </section>
 
       <section className="karte">
-        <h2>Nächstes Spiel</h2>
-        {naechstes && gegner ? (
+        <h2>{vorbei ? 'Hauptrunde beendet' : 'Nächstes Spiel'}</h2>
+        {vorbei ? (
+          <>
+            <p>
+              Endstand: {b.siege}–{b.niederlagen}, Platz {platz} im {CONFERENCES[eigenesTeam.conference]}.
+            </p>
+            <p className="hinweis">
+              Playoffs, Awards und die Offseason folgen in den nächsten Meilensteinen. Du kannst dir Tabellen,
+              Ergebnisse und Statistiken im Liga-Tab ansehen.
+            </p>
+          </>
+        ) : naechstes && gegner ? (
           <>
             <div className="gegner">
               <TeamLogo kuerzel={gegner.kuerzel} farbe1={gegner.farbe1} farbe2={gegner.farbe2} groesse={40} />
@@ -116,22 +248,59 @@ function StartTab({ spiel, eigenesTeam, onTab }: { spiel: SpielDaten; eigenesTea
                   {naechstes.heim ? 'vs' : '@'} {teamName(gegner)}
                 </strong>
                 <span>
-                  {formatDatum(spiel.saison, naechstes.tag)} · Spiel {spiele.indexOf(naechstes) + 1} von {spiele.length}
+                  {formatDatum(spiel.saison, naechstes.tag)} · Spiel {alleSpiele.indexOf(naechstes) + 1} von {alleSpiele.length}
+                </span>
+                <span>
+                  Bilanz {liga.stand.teams[gegner.id]!.siege}–{liga.stand.teams[gegner.id]!.niederlagen}
                 </span>
               </div>
             </div>
-            <p className="hinweis">Die Spielsimulation kommt in Meilenstein 3.</p>
+            <button className="knopf" disabled={laeuft} onClick={() => onSimuliere('naechstesSpiel')}>
+              Nächstes Spiel simulieren
+            </button>
+            <div className="knopfreihe drei">
+              <button className="knopf zweit klein" disabled={laeuft} onClick={() => onSimuliere('woche')}>
+                Eine Woche
+              </button>
+              <button
+                className="knopf zweit klein"
+                disabled={laeuft || !deadlineOffen}
+                onClick={() => onSimuliere('deadline')}
+                title={deadlineOffen ? '' : 'Die Trade Deadline ist schon vorbei'}
+              >
+                {deadlineOffen ? 'Bis Deadline' : 'Deadline vorbei'}
+              </button>
+              <button className="knopf zweit klein" disabled={laeuft} onClick={() => onSimuliere('saisonende')}>
+                Bis Saisonende
+              </button>
+            </div>
+            {deadlineOffen && (
+              <p className="hinweis">
+                Trade Deadline: {formatDatum(spiel.saison, deadline)} (nach etwa 60 % der Saison).
+              </p>
+            )}
           </>
         ) : (
           <p className="hinweis">Kein Spiel mehr angesetzt.</p>
         )}
-        <button className="knopf" disabled>
-          Nächstes Spiel simulieren
-        </button>
+        {fehler && <p className="fehler">{fehler}</p>}
         <button className="knopf zweit abstand" onClick={() => onTab('liga')}>
-          Spielplan ansehen
+          Tabellen &amp; Spielplan ansehen
         </button>
       </section>
+
+      {letzte.length > 0 && (
+        <section className="karte">
+          <h2>Letzte Spiele</h2>
+          {letzte[0] && <p className="spieltext">{letzte[0].erg.text}</p>}
+          <div className="spielplan">
+            {letzte.map(({ erg, index }) => (
+              <Ergebniszeile key={erg.tag} erg={erg} liga={liga} eigenesTeamId={eigenesTeam.id} index={index} onBox={onBox} />
+            ))}
+          </div>
+          <p className="hinweis">Antippen für den Boxscore.</p>
+        </section>
+      )}
 
       <section className="karte">
         <h2>Posteingang</h2>
@@ -193,30 +362,50 @@ function TeamTab({
 
 // ---------- Liga ----------
 
-function LigaTab({ spiel, onTeam }: { spiel: SpielDaten; onTeam: (id: number) => void }) {
-  const [ansicht, setAnsicht] = useState<'tabelle' | 'spielplan'>('tabelle');
+type LigaAnsicht = 'tabelle' | 'ergebnisse' | 'statistik' | 'teams' | 'spielplan';
+const LIGA_ANSICHTEN: { id: LigaAnsicht; label: string }[] = [
+  { id: 'tabelle', label: 'Tabelle' },
+  { id: 'ergebnisse', label: 'Ergebnisse' },
+  { id: 'statistik', label: 'Statistik' },
+  { id: 'teams', label: 'Teams' },
+  { id: 'spielplan', label: 'Spielplan' },
+];
+
+function LigaTab({
+  spiel,
+  onTeam,
+  onSpieler,
+  onBox,
+}: {
+  spiel: SpielDaten;
+  onTeam: (id: number) => void;
+  onSpieler: (id: number) => void;
+  onBox: (tag: number, index: number) => void;
+}) {
+  const [ansicht, setAnsicht] = useState<LigaAnsicht>('tabelle');
   return (
     <>
       <h1>Liga</h1>
-      <div className="auswahl" role="tablist" aria-label="Ansicht">
-        <button
-          role="tab"
-          aria-selected={ansicht === 'tabelle'}
-          className={ansicht === 'tabelle' ? 'wahl aktiv' : 'wahl'}
-          onClick={() => setAnsicht('tabelle')}
-        >
-          Teams
-        </button>
-        <button
-          role="tab"
-          aria-selected={ansicht === 'spielplan'}
-          className={ansicht === 'spielplan' ? 'wahl aktiv' : 'wahl'}
-          onClick={() => setAnsicht('spielplan')}
-        >
-          Spielplan
-        </button>
+      <div className="auswahl scroll" role="tablist" aria-label="Ansicht">
+        {LIGA_ANSICHTEN.map((a) => (
+          <button
+            key={a.id}
+            role="tab"
+            aria-selected={ansicht === a.id}
+            className={ansicht === a.id ? 'wahl aktiv' : 'wahl'}
+            onClick={() => setAnsicht(a.id)}
+          >
+            {a.label}
+          </button>
+        ))}
       </div>
-      {ansicht === 'tabelle' ? <TeamListe spiel={spiel} onTeam={onTeam} /> : <Spielplan spiel={spiel} onTeam={onTeam} />}
+      {ansicht === 'tabelle' && <TabelleView liga={spiel.liga} userTeamId={spiel.userTeamId} onTeam={onTeam} />}
+      {ansicht === 'ergebnisse' && (
+        <ErgebnisseView liga={spiel.liga} saison={spiel.saison} userTeamId={spiel.userTeamId} onBox={onBox} />
+      )}
+      {ansicht === 'statistik' && <StatistikView liga={spiel.liga} onSpieler={onSpieler} />}
+      {ansicht === 'teams' && <TeamListe spiel={spiel} onTeam={onTeam} />}
+      {ansicht === 'spielplan' && <Spielplan spiel={spiel} onTeam={onTeam} onBox={onBox} />}
     </>
   );
 }
@@ -225,7 +414,7 @@ function TeamListe({ spiel, onTeam }: { spiel: SpielDaten; onTeam: (id: number) 
   const { liga } = spiel;
   return (
     <>
-      <p className="hinweis">Tabellen mit Siegen und Niederlagen gibt es ab Meilenstein 3. Tippe ein Team für Kader und Details an.</p>
+      <p className="hinweis">Tippe ein Team für Kader und Details an.</p>
       {CONFERENCES.map((confName, c) => (
         <section key={confName}>
           <h2 className="zwischentitel">{confName}-Conference</h2>
@@ -234,17 +423,22 @@ function TeamListe({ spiel, onTeam }: { spiel: SpielDaten; onTeam: (id: number) 
               <h3>{divName}</h3>
               {liga.teams
                 .filter((t) => t.conference === c && t.division === d)
-                .map((t) => (
-                  <button
-                    key={t.id}
-                    className={t.id === spiel.userTeamId ? 'teamzeile eigene' : 'teamzeile'}
-                    onClick={() => onTeam(t.id)}
-                  >
-                    <TeamLogo kuerzel={t.kuerzel} farbe1={t.farbe1} farbe2={t.farbe2} groesse={30} />
-                    <span className="teamzeile-name">{teamName(t)}</span>
-                    <span className="teamzeile-bilanz">0–0</span>
-                  </button>
-                ))}
+                .map((t) => {
+                  const b = liga.stand.teams[t.id]!;
+                  return (
+                    <button
+                      key={t.id}
+                      className={t.id === spiel.userTeamId ? 'teamzeile eigene' : 'teamzeile'}
+                      onClick={() => onTeam(t.id)}
+                    >
+                      <TeamLogo kuerzel={t.kuerzel} farbe1={t.farbe1} farbe2={t.farbe2} groesse={30} />
+                      <span className="teamzeile-name">{teamName(t)}</span>
+                      <span className="teamzeile-bilanz">
+                        {b.siege}–{b.niederlagen}
+                      </span>
+                    </button>
+                  );
+                })}
             </div>
           ))}
         </section>
@@ -253,24 +447,53 @@ function TeamListe({ spiel, onTeam }: { spiel: SpielDaten; onTeam: (id: number) 
   );
 }
 
-function Spielplan({ spiel, onTeam }: { spiel: SpielDaten; onTeam: (id: number) => void }) {
+function Spielplan({
+  spiel,
+  onTeam,
+  onBox,
+}: {
+  spiel: SpielDaten;
+  onTeam: (id: number) => void;
+  onBox: (tag: number, index: number) => void;
+}) {
   const { liga } = spiel;
-  const spiele = spieleVonTeam(liga.spielplan, spiel.userTeamId);
+  const spieleDesTeams = spieleVonTeam(liga.spielplan, spiel.userTeamId);
+  const naechster = naechsterEigenerSpieltag(spiel);
   return (
     <>
       <p className="hinweis">
-        Dein Spielplan: {spiele.length} Spiele an {liga.spielplan.length} Spieltagen. Antippen für den Gegner.
+        Dein Spielplan: {spieleDesTeams.length} Spiele an {liga.spielplan.length} Spieltagen. Gespielte Spiele öffnen den
+        Boxscore, offene den Gegner.
       </p>
       <div className="karte spielplan">
-        {spiele.map((s, i) => {
+        {spieleDesTeams.map((s, i) => {
           const g = liga.teams[s.gegner] as Team;
+          const gespielt = s.tag < liga.tag;
+          const idx = gespielt ? spielIndex(liga, s.tag, spiel.userTeamId) : -1;
+          const erg = gespielt ? liga.ergebnisse[s.tag]?.[idx] : undefined;
+          const eigene = erg ? (s.heim ? erg.heim.punkte : erg.gast.punkte) : 0;
+          const fremde = erg ? (s.heim ? erg.gast.punkte : erg.heim.punkte) : 0;
           return (
-            <button key={i} className="spielzeile" onClick={() => onTeam(g.id)}>
+            <button
+              key={i}
+              className={s.tag === naechster ? 'spielzeile naechstes' : 'spielzeile'}
+              onClick={() => (erg ? onBox(s.tag, idx) : onTeam(g.id))}
+            >
               <span className="spielzeile-nr">{i + 1}</span>
               <span className="spielzeile-datum">{formatDatum(spiel.saison, s.tag)}</span>
               <span className="spielzeile-ha">{s.heim ? 'vs' : '@'}</span>
               <TeamLogo kuerzel={g.kuerzel} farbe1={g.farbe1} farbe2={g.farbe2} groesse={26} />
-              <span className="spielzeile-name">{g.stadt} {g.name}</span>
+              <span className="spielzeile-name">
+                {g.stadt} {g.name}
+              </span>
+              {erg && (
+                <span className="erg-endstand">
+                  <span className={eigene > fremde ? 'ergebnis-badge sieg' : 'ergebnis-badge niederlage'}>
+                    {eigene > fremde ? 'S' : 'N'}
+                  </span>{' '}
+                  {eigene}:{fremde}
+                </span>
+              )}
             </button>
           );
         })}
@@ -333,17 +556,23 @@ function MenueTab({
       </section>
 
       <section className="karte">
-        <h2>Test: Speichern prüfen</h2>
+        <h2>Einstellungen</h2>
+        <label className="schalter">
+          <input
+            type="checkbox"
+            checked={spiel.einstellungen.pbp}
+            onChange={(e) =>
+              void speichern(
+                { ...spiel, einstellungen: { ...spiel.einstellungen, pbp: e.target.checked } },
+                e.target.checked ? 'Spielverlauf für eigene Spiele ist an ✔' : 'Spielverlauf für eigene Spiele ist aus ✔',
+              )
+            }
+          />
+          <span>Spielverlauf (Play-by-Play) für eigene Spiele speichern</span>
+        </label>
         <p className="hinweis">
-          Erhöht die Saison um 1 und speichert sofort. Schließe danach die App komplett und öffne sie neu: Die
-          Saisonzahl muss erhalten bleiben. (Wird später entfernt.)
+          Gilt für Spiele, die du ab jetzt simulierst. Gespeichert werden die letzten 10 eigenen Spiele.
         </p>
-        <button
-          className="knopf zweit"
-          onClick={() => speichern({ ...spiel, saison: spiel.saison + 1 }, 'Saison erhöht und gespeichert ✔')}
-        >
-          Saison +1 (Test)
-        </button>
       </section>
 
       <section className="karte">

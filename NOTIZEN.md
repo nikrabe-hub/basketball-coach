@@ -4,53 +4,62 @@ Entscheidungen, offene Punkte und bekannte Bugs. Bei neuen Sitzungen zuerst lese
 
 ## Stand
 
-- **Meilenstein 1 (Grundgerüst): fertig und auf dem Handy abgenommen** (APK läuft, Flugmodus ok, Speichern ok, Zurück-Taste ok).
-- **Meilenstein 2 (Liga-Generator): Code fertig, in der Cloud getestet.** Wartet auf den Handy-Test (Checkliste unten).
-- Nächster Schritt: Meilenstein 3 (Spiel-Engine: Ballbesitz-Simulation, Boxscores, Tabellen, Statistiken, Balancing-Skript, Simulieren-Buttons). Vorher kurzer Plan und OK abwarten.
+- **Meilenstein 1 (Grundgerüst): fertig und auf dem Handy abgenommen.**
+- **Meilenstein 2 (Liga-Generator): fertig und auf dem Handy abgenommen** (Saisonlänge, Teamwahl, Kader, Tabellen ok).
+- **Meilenstein 3 (Spiel-Engine): Code fertig, in der Cloud getestet.** Wartet auf den Handy-Test (Checkliste unten).
+- Nächster Schritt: Meilenstein 4 (Coaching: Rotation, Taktik, Müdigkeit sichtbar, Verletzungen, Moral, Playoffs, Awards). Vorher kurzer Plan und OK abwarten.
 
 ## Entscheidungen
 
-- Stack wie im Brief: TypeScript strict, React 19, Vite 8, Vitest 5, Dexie 4, Capacitor 8 (Android). Schlichtes eigenes CSS (kein Tailwind).
+- Stack wie im Brief: TypeScript strict, React 19, Vite 8, Vitest 5, Dexie 4, Capacitor 8 (Android). Schlichtes eigenes CSS (kein Tailwind). Dazu `tsx` für das Balancing-Skript.
 - App-ID: `de.niklas.basketballcoach`. Hochformat fest eingestellt.
-- **Spielstand-Format 2** (`CONFIG.saveVersion`): `SpielDaten = { coach, seed, saison, liga, userTeamId }`. Die komplette Liga (Teams, Spieler, Spielplan) liegt als JSON im Spielstand. Migration 1 -> 2 erzeugt für alte Test-Spielstände eine Liga aus dem gespeicherten Seed (Team 0).
+- **Spielstand-Format 3** (`CONFIG.saveVersion`): `SpielDaten = { coach, seed, saison, liga, userTeamId, einstellungen }`. Die Liga enthält Teams, Spieler, Spielplan, `tag` (nächster ungespielter Kalendertag), `ergebnisse[tag][i]` (Boxscores) und `stand` (Tabellen + Spielerstatistik der laufenden Saison). Migrationen: 1 -> 2 (Liga erzeugen), 2 -> 3 (leere Tabellen, Einstellungen).
+- **Boxscores** sind Zahlenlisten (`BoxZeile`, Indizes in `BX`, `stats.ts`). Alle Boxscores der aktuellen Saison bleiben im Spielstand (Entscheidung des Nutzers). Eine volle 82-Spiele-Saison ist ca. 2,1 MB groß. Älter als 2 Saisons zusammenfassen kommt mit der Offseason (Meilenstein 5/7).
+- **Play-by-Play** nur für eigene Spiele, die letzten 10 werden behalten, im Menü abschaltbar.
 - **Zurück-Taste:** `@capacitor/app`, Handler in `src/ui/nav.ts`. Immer ein Schritt im Verlauf zurück (Dialog zu, vorheriger Tab, Spiel -> Hauptmenü). Nur im Hauptmenü ohne Dialog beendet sie die App.
-- Zufall: In der Engine nur `Rng` aus `src/engine/rng.ts` (seedbar). `Math.random()` kommt nur in `neuerSeed()` und beim Knopf "Zufälliges Team" in der Oberfläche vor.
-- **Neues Spiel:** Dialog (Name, Alter, Saisonlänge 82/58/29) -> Liga wird erzeugt -> Teamwahl-Bildschirm (30 Teams nach Stärke sortiert, Erwartung der Besitzer, Kader ansehen, "Zufälliges Team", "Neue Liga") -> Spielstand wird angelegt.
-- **Spielplan (Variante A, NBA-Spieltage):** Kalender mit ca. 2 Tagen pro Spiel (82 Spiele = 164 Tage). Ein Team spielt höchstens einmal pro Tag. 82 Spiele: 4x Division-Gegner, 3x übrige Conference-Gegner, 2–3x Gegner der anderen Conference. 58 = jedes Team 2x, 29 = jedes Team 1x. Heim/Auswärts auf +-2 ausgeglichen. Kalenderdaten sind nur Anzeige (Saisonstart 22. Oktober, `CONFIG.saison`).
-- Spielerwerte: Attribute 25–99. OVR = positionsabhängiger gewichteter Durchschnitt (`player.ts`). Junge Spieler sind schwächer, haben aber mehr POT. Persönlichkeit wird als Wort angezeigt (sehr niedrig ... sehr hoch).
-- Namen: sechs Regionen aus eigenen Listen (`names.ts`), Sperrliste bekannter echter Spieler, Namen sind je Liga eindeutig.
-- Teams: 30 erfundene Teams (`teams.ts`), Logo = Kreis mit Kürzel in Teamfarben (SVG-Komponente `TeamLogo`). Akzentfarbe der App = Farbe des eigenen Teams.
-- Verträge: Gehalt wächst mit OVR, Teamgehälter liegen zufällig bei 88–112 % der Gehaltsobergrenze. Alle Zahlen in `src/engine/config.ts` (Abschnitt `generator`).
-- Der Test-Knopf "Saison +1 (Test)" im Menü-Tab dient nur zur Prüfung des Speicherns. Spätestens in Meilenstein 3 entfernen.
-- Web Worker für die Simulation und das Balancing-Skript (10 Saisons ohne UI, dafür `tsx` oder `vite-node` ergänzen) kommen in Meilenstein 3.
+- Zufall: In der Engine nur `Rng` aus `src/engine/rng.ts` (seedbar). Jedes Spiel bekommt seinen eigenen Seed aus Liga-Seed, Saison, Tag und Spielnummer (`spielSeed`): Ergebnisse sind reproduzierbar und hängen nicht davon ab, in welchen Etappen simuliert wird (getestet). `Math.random()` kommt nur in `neuerSeed()` und beim Knopf "Zufälliges Team" vor.
+- **Spielplan (Variante A, NBA-Spieltage):** Kalender mit ca. 2 Tagen pro Spiel (82 Spiele = 164 Tage). Heim/Auswärts auf +-2 ausgeglichen. Kalenderdaten sind nur Anzeige (Saisonstart 22. Oktober).
+- **Simulation (`engine/game.ts`):** Ballbesitz für Ballbesitz. Spielzüge (Isolation, Pick & Roll, Post-Up, Spot-Up, Drive & Kick, Fast Break, Putback), Wurfzonen (Ring/Mitteldistanz/Dreier), Trefferchance aus Werfer gegen Verteidiger (Zuordnung nach Position und Größe), Block, Foul mit Freiwürfen (Bonus ab 5 Teamfouls, Ausfoulen bei 6), Turnover/Steal, Rebound (mit Team-Rebounds), Assist, Viertel, Verlängerung, Auswechslungen, Garbage Time.
+  - **Rotation (automatisch):** Rotationswert = Rang im Kader (nicht OVR) minus Müdigkeit, damit auch Stars regelmäßig pausieren (Stars ca. 34–37 Min.). Mindestens ein Guard und ein großer Spieler auf dem Feld. Mindesteinsatz 2 Minuten.
+  - **`attributWirkung`** (config.ts) ist der Hauptregler für den Abstand zwischen starken und schwachen Teams. Wer *was* macht (Wurf, Rebound, Assist) nutzt die Rohwerte, Trefferchancen die angeglichenen Werte.
+  - **`ausgleich`**: Der führende Teams trifft minimal schlechter, der zurückliegende besser. Ohne diesen Regler gab es doppelt so viele Kantersiege wie in der NBA.
+- **Simulieren:** Nächstes Spiel (alle Spiele bis einschließlich dem eigenen Spieltag), Eine Woche (7 Kalendertage), Bis Deadline (60 % der Spieltage), Bis Saisonende. Läuft in einem Web Worker (`worker/sim.worker.ts`), mit Fortschrittsanzeige und Abbrechen (Spielstand bleibt dann unverändert). Das Ergebnis wird sofort angezeigt und danach gespeichert (Autosave).
+- **Tabellen:** Sortierung nach Siegquote, dann Punktedifferenz. Direkte Tiebreaker-Regeln (Direktvergleich usw.) kommen mit den Playoffs (Meilenstein 4). Markierung Platz 1–6 grün, 7–10 gelb (Play-In).
+- Nach der Hauptrunde ist Schluss: Playoffs, Awards (Meilenstein 4) und Offseason (Meilenstein 5) fehlen noch, der Spielstand bleibt am Saisonende stehen.
+- Spielerwerte: Attribute 25–99. OVR = positionsabhängiger gewichteter Durchschnitt (`player.ts`). Persönlichkeit wird als Wort angezeigt.
+- Teams: 30 erfundene Teams, Logo = Kreis mit Kürzel in Teamfarben. Akzentfarbe der App = Farbe des eigenen Teams.
+- Verträge: Gehalt wächst mit OVR, Teamgehälter liegen bei 88–112 % der Gehaltsobergrenze. Alle Zahlen in `src/engine/config.ts`.
 
-## Geprüft (Meilenstein 2)
+## Geprüft (Meilenstein 3)
 
-- `npm test`: 49 Tests grün (Zufallsgenerator, Liga-Generator, Namen/Sperrliste, Spielplan für 82/58/29, Speichern, Migrationen inkl. Umstieg von Format 1).
-- `npm run build` (inkl. strenger Typprüfung): fehlerfrei. Eine Liga entsteht in ca. 60 ms (Ziel: unter 5 s).
-- Browser-Test mit Handy-Viewport (390x844): Neues Spiel, Teamwahl, Kader, Spielerkarte, Liga-Tab, Spielplan, Zurück-Kette, Speichern, Neuladen, Löschen, keine Konsolenfehler.
+- `npm test`: 72 Tests grün (Zufallsgenerator, Liga, Spielplan, Spiel-Simulation inkl. Boxscore-Konsistenz, Saison-Simulation, Etappen-Unabhängigkeit, Play-by-Play, Speichern, Migrationen 1->2->3).
+- `npm run balance` (10 Saisons à 82 Spiele, ca. 26 s): alle Zielwerte erreicht, u. a. 110 Punkte, 46,8 % FG, 35,8 % 3P, 98,7 Ballbesitze, 45 Rebounds, 24 Assists, 13 Turnovers, 19 Fouls pro Team; Heimsiegquote 57 %; beste Bilanz ca. 66 Siege, schlechteste ca. 16; Abstand im Spiel Standardabweichung 13,5; Top-Scorer ca. 33 Punkte. Mit `npm run balance -- 4 29` geht es in wenigen Sekunden (4 Saisons à 29 Spiele).
+  - Bekannte Abweichung: nur ca. 3 % Verlängerungen (NBA ca. 6 %), weil Endspiel-Taktik (absichtliches Foulen, Auszeiten) fehlt.
+- Eine Saison mit 82 Spielen rechnet in ca. 3 s (Desktop), auf dem Handy vermutlich 10–20 s (daher Fortschrittsanzeige).
+- Browser-Test mit Handy-Viewport (390x844): Neues Spiel, Teamwahl, Simulieren (Spiel, Woche, Deadline, Saisonende), Boxscore, Spielverlauf, Spielerkarte mit Statistik, alle Liga-Ansichten, Zurück-Kette, Neuladen, Löschen, keine Konsolenfehler.
 
 ## Noch NICHT geprüft
 
-- Verhalten auf dem echten Handy (Wischen der Tabellen, Tastatur im Dialog, Zurück-Taste mit den neuen Ansichten).
-- Spielstände aus Meilenstein 1 auf dem Handy: werden beim Laden automatisch auf Format 2 gehoben (nur per Unit-Test geprüft).
+- Verhalten auf dem echten Handy: Geschwindigkeit der Simulation, Web Worker in der APK, Wischen der breiten Tabellen, Zurück-Taste während der Simulation.
+- Spielstände aus Meilenstein 2 auf dem Handy: werden beim Laden auf Format 3 gehoben (nur per Unit-Test geprüft).
 
-## Checkliste Handy-Test (Meilenstein 2)
+## Checkliste Handy-Test (Meilenstein 3)
 
-1. Neue APK installieren (über die alte drüber). Ein alter Spielstand aus Meilenstein 1 muss sich noch laden lassen und bekommt eine Liga.
-2. Neues Spiel: Name eingeben, Saisonlänge wählen -> "Weiter: Team wählen". Es erscheinen 30 Teams, nach Stärke sortiert.
-3. Ein Team antippen: Erwartung und beste Spieler erscheinen. "Kader ansehen" öffnet den Kader. Spieler antippen -> Spielerkarte. Zurück-Taste: Spielerkarte -> Kader -> Teamwahl -> Hauptmenü.
-4. "Zufälliges Team" und "Neue Liga" ausprobieren. Dann ein Team übernehmen: Die App färbt sich in den Teamfarben.
-5. Start-Tab: Nächstes Spiel mit Datum und Gegner. Team-Tab: Gehaltsstatus und Kader. Spaltenkopf antippen sortiert, die Tabelle lässt sich nach rechts wischen, der Name bleibt links stehen.
-6. Liga-Tab: Teams nach Conference und Division, Tippen öffnet Kader. "Spielplan": alle Spiele deines Teams (82/58/29).
-7. App komplett schließen und neu öffnen: Spielstand zeigt Teamname, "Weiter spielen" lädt Liga und Kader unverändert.
-8. Fällt dir etwas auf, das unrealistisch wirkt (Spielerwerte, Gehälter, Teamstärken)? Notieren, das lässt sich in `config.ts` anpassen.
+1. Neue APK installieren (über die alte drüber). Ein Spielstand aus Meilenstein 2 muss sich laden lassen (Bilanz 0–0). Du kannst auch ein neues Spiel anfangen.
+2. Start-Tab: "Nächstes Spiel simulieren" antippen. Es erscheint kurz eine Fortschrittsanzeige. Danach: Bilanz, "Letzte Spiele" mit Text zum Spiel. Antippen öffnet den Boxscore (Viertel, Spieler, Spielverlauf). Spieler antippen -> Spielerkarte mit Saison-Statistik. Zurück-Taste: Spielerkarte -> Boxscore -> Start.
+3. "Eine Woche" und "Bis Deadline" ausprobieren. Wie lange dauert "Bis Saisonende" bei 82 Spielen? Bitte die Dauer notieren. Während der Simulation "Abbrechen" testen: Danach muss alles unverändert sein.
+4. Liga-Tab: Tabelle (Conference, Division; grün = Plätze 1–6, gelb = 7–10), Ergebnisse (mit ◀ ▶ Tag blättern, Spiel antippen), Statistik (Spalten antippen zum Sortieren), Teams, Spielplan (gespielte Spiele zeigen S/N und Ergebnis).
+5. App schließen und neu öffnen: Bilanz, Tabellen und Boxscores müssen erhalten sein.
+6. Menü: Schalter "Spielverlauf für eigene Spiele" (an/aus).
+7. Wirken die Ergebnisse realistisch? Zum Beispiel Punkte pro Spiel, Stars (Punkte, Minuten), Siege der besten/schlechtesten Teams, zu viele Kantersiege? Notieren, alle Zahlen sind in `config.ts` (Abschnitt `spiel`) einstellbar.
+8. Nach dem Saisonende: Start-Tab zeigt "Hauptrunde beendet" (weiter geht es erst mit Meilenstein 4/5).
 
 ## Offene Punkte / Ideen
 
 - App-Icon: aktuell das Standard-Icon von Capacitor. Kommt im Feinschliff (Meilenstein 7).
 - Helles Design optional (Meilenstein 7).
-- Bilanz und Tabellen zeigen 0–0, bis die Simulation in Meilenstein 3 da ist.
+- Endspiel-Taktik (absichtliches Foulen, Auszeiten, Schlussminute): fehlt, deshalb nur ca. 3 % Verlängerungen statt 6 %. Passt zu Meilenstein 4 (Coaching).
+- Tabellen-Tiebreaker nach Direktvergleich/Division: kommt mit den Playoffs (Meilenstein 4).
 - Editor für Team- und Spielernamen (Brief: "optional später").
 
 ## Bekannte Bugs

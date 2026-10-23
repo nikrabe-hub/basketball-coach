@@ -21,13 +21,15 @@ interface Props<T> {
   start?: { key: string; absteigend: boolean };
   /** Zeile hervorheben (z. B. eigenes Team) */
   hervorheben?: (zeile: T) => boolean;
+  /** Zusätzliche CSS-Klasse je Zeile (z. B. Playoff-Zonen in der Tabelle) */
+  zeilenKlasse?: (zeile: T) => string;
 }
 
 /**
  * Tabelle für das Handy: horizontal wischbar, die erste Spalte bleibt stehen,
  * Sortieren per Tippen auf die Spaltenüberschrift.
  */
-export function SortTable<T>({ spalten, zeilen, zeilenKey, onZeile, start, hervorheben }: Props<T>) {
+export function SortTable<T>({ spalten, zeilen, zeilenKey, onZeile, start, hervorheben, zeilenKlasse }: Props<T>) {
   const [sortKey, setSortKey] = useState<string | null>(start?.key ?? null);
   const [absteigend, setAbsteigend] = useState(start?.absteigend ?? true);
 
@@ -73,7 +75,7 @@ export function SortTable<T>({ spalten, zeilen, zeilenKey, onZeile, start, hervo
           {sortiert.map((z) => (
             <tr
               key={zeilenKey(z)}
-              className={`${onZeile ? 'klickbar' : ''} ${hervorheben?.(z) ? 'eigene' : ''}`}
+              className={`${onZeile ? 'klickbar' : ''} ${hervorheben?.(z) ? 'eigene' : ''} ${zeilenKlasse?.(z) ?? ''}`}
               onClick={onZeile ? () => onZeile(z) : undefined}
             >
               {spalten.map((s, i) => (

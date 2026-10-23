@@ -39,6 +39,10 @@ export function TeamView({ liga, teamId, onSpieler }: Props) {
         </div>
       </div>
       <div className="fakten">
+        <span>Bilanz</span>
+        <span>
+          {liga.stand.teams[teamId]?.siege ?? 0}–{liga.stand.teams[teamId]?.niederlagen ?? 0}
+        </span>
         <span>Stärke</span>
         <span>
           {teamStaerke(liga, teamId).toFixed(1).replace('.', ',')} (Platz {rang} von {liga.teams.length})

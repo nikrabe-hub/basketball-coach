@@ -433,3 +433,77 @@ button.slot {
 .attr-wert { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
 .pers { display: flex; justify-content: space-between; padding: 3px 0; font-size: 0.9rem; }
 .pers span:first-child { color: var(--text-leise); }
+
+/* ---------- Meilenstein 3: Simulation, Boxscore, Tabellen ---------- */
+
+.auswahl.scroll { overflow-x: auto; scrollbar-width: none; }
+.auswahl.scroll::-webkit-scrollbar { display: none; }
+.auswahl.scroll .wahl { flex: 0 0 auto; min-width: 96px; padding: 0 14px; min-height: 44px; }
+
+.knopfreihe.drei { margin-top: 10px; gap: 8px; }
+.knopfreihe.drei .knopf { flex: 1; padding-left: 4px; padding-right: 4px; font-size: 0.85rem; }
+
+.sim-overlay { align-items: center; justify-content: center; }
+.sim-overlay .dialog { width: min(92%, 420px); border-radius: var(--radius); height: auto; }
+.fortschritt { height: 12px; border-radius: 6px; background: var(--bg-karte-hell); overflow: hidden; margin: 6px 0 4px; }
+.fortschritt-balken { height: 100%; background: var(--akzent); border-radius: 6px; transition: width 0.15s linear; }
+
+.spieltext { font-size: 0.95rem; line-height: 1.45; margin: 4px 0 10px; }
+.ergebnis-badge { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 6px; font-size: 0.78rem; font-weight: 800; }
+.ergebnis-badge.sieg { background: rgba(62, 207, 142, 0.18); color: var(--gut); }
+.ergebnis-badge.niederlage { background: rgba(239, 91, 91, 0.18); color: var(--schlecht); }
+.erg-endstand { font-variant-numeric: tabular-nums; font-weight: 700; white-space: nowrap; }
+.spielzeile.naechstes { background: var(--bg-karte-hell); border-radius: 10px; }
+
+/* Ergebnisse eines Tages */
+.tagwahl { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+.tagwahl div { display: flex; flex-direction: column; align-items: center; }
+.tagwahl span { color: var(--text-leise); font-size: 0.8rem; }
+.tagwahl .knopf { min-width: 52px; }
+.ergebniszeile {
+  display: flex; align-items: center; gap: 8px; width: 100%; min-height: 52px; padding: 6px 4px;
+  background: none; border: 0; border-bottom: 1px solid var(--rand); color: inherit; font: inherit; cursor: pointer;
+}
+.spielplan .ergebniszeile:last-child { border-bottom: 0; }
+.ergebniszeile.eigene { background: var(--bg-karte-hell); border-radius: 10px; }
+.erg-name { width: 3.2em; color: var(--text-leise); font-weight: 600; }
+.erg-name:nth-of-type(1) { text-align: left; }
+.ergebniszeile .erg-name:last-of-type { text-align: right; }
+.erg-punkte { flex: 1; text-align: center; font-size: 1.15rem; font-variant-numeric: tabular-nums; color: var(--text-leise); }
+.erg-trenner { color: var(--text-leise); width: 2em; text-align: center; font-size: 0.8rem; }
+.sieger { color: var(--text); font-weight: 800; }
+
+/* Boxscore */
+.box-ergebnis { display: flex; align-items: center; justify-content: center; gap: 12px; margin: 6px 0 14px; }
+.box-team { display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1; color: var(--text-leise); font-size: 0.9rem; }
+.box-team strong { font-size: 2.3rem; line-height: 1; font-variant-numeric: tabular-nums; }
+.box-team.sieger { color: var(--text); }
+.box-trenner { font-size: 1.6rem; color: var(--text-leise); }
+.kurztabelle { width: 100%; border-collapse: collapse; margin-bottom: 8px; font-variant-numeric: tabular-nums; }
+.kurztabelle th, .kurztabelle td { padding: 6px 8px; text-align: center; border-bottom: 1px solid var(--rand); font-size: 0.9rem; }
+.kurztabelle th { color: var(--text-leise); font-size: 0.72rem; text-transform: uppercase; }
+.kurztabelle td:first-child { text-align: left; font-weight: 700; }
+.pos-klein { color: var(--text-leise); font-size: 0.75rem; }
+.summenzeile { margin-top: 6px; }
+.verlauf { list-style: none; margin: 0; padding: 0; font-size: 0.85rem; }
+.verlauf li { padding: 6px 2px; border-bottom: 1px solid var(--rand); }
+
+/* Tabellen */
+.rang { display: inline-block; width: 1.4em; color: var(--text-leise); text-align: right; margin-right: 2px; }
+.tabelle tr.zone-direkt td.fix { box-shadow: inset 3px 0 0 var(--gut), 1px 0 0 var(--rand); }
+.tabelle tr.zone-playin td.fix { box-shadow: inset 3px 0 0 #e6c14a, 1px 0 0 var(--rand); }
+.divisionsblock { margin-bottom: 12px; }
+.klein-titel { margin: 0 0 6px; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-leise); }
+.legende .punkt { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 2px; vertical-align: middle; }
+.zone-direkt-punkt { background: var(--gut); }
+.zone-playin-punkt { background: #e6c14a; }
+
+/* Schalter (Checkbox) */
+.schalter { display: flex; align-items: center; gap: 12px; min-height: 44px; margin-bottom: 4px; cursor: pointer; }
+.schalter input { width: 22px; height: 22px; accent-color: var(--akzent); flex: none; }
+
+/* Statistik auf der Spielerkarte */
+.stat-raster { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px 6px; }
+.stat-feld { display: flex; flex-direction: column; align-items: center; }
+.stat-feld strong { font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+.stat-feld span { font-size: 0.7rem; color: var(--text-leise); }
