@@ -201,5 +201,7 @@ export function erzeugeSpieler(rng: Rng, namen: NamenGenerator, vorgabe: Spieler
     ovr,
     pot,
     teamId: vorgabe.teamId,
+    moral: CONFIG.moral.start,
+    verletzung: null,
   };
 }

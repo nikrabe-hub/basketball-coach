@@ -63,3 +63,20 @@ export function fmtPlus(x: number, nachkomma = 0): string {
 export function plusKlasse(x: number): string {
   return x > 0 ? 'w-gut' : x < 0 ? 'w-schwach' : '';
 }
+
+/** Moral (0..100) in ein Wort übersetzen. */
+export function moralWort(moral: number): string {
+  if (moral >= 80) return 'begeistert';
+  if (moral >= 65) return 'zufrieden';
+  if (moral >= 50) return 'neutral';
+  if (moral >= 35) return 'genervt';
+  return 'unzufrieden';
+}
+
+/** CSS-Klasse für die Moral */
+export function moralKlasse(moral: number): string {
+  if (moral >= 80) return 'w-top';
+  if (moral >= 65) return 'w-gut';
+  if (moral >= 50) return 'w-mittel';
+  return 'w-schwach';
+}

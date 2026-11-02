@@ -1,6 +1,18 @@
 import { CONFIG } from './config';
+import { anfaelligkeit, wuerfleVerletzung } from './injuries';
 import type { Rng } from './rng';
-import type { AttributKey, BoxZeile, Spieler, SpielErgebnis, TeamBox } from './types';
+import { eignungsFaktor, kombiVon, type Kombi } from './tactics';
+import {
+  STANDARD_TAKTIK,
+  type AttributKey,
+  type BoxZeile,
+  type Coaching,
+  type NeueVerletzung,
+  type Spieler,
+  type SpielErgebnis,
+  type Taktik,
+  type TeamBox,
+} from './types';
 
 /**
  * Ballbesitz-für-Ballbesitz-Simulation eines Spiels.
@@ -21,12 +33,16 @@ export interface Mannschaft {
   kuerzel: string;
   /** Alle Spieler des Kaders */
   spieler: Spieler[];
+  /** Rotation und Taktik; ohne Angabe: automatische Rotation und Standard-Taktik (KI-Teams) */
+  coaching?: Coaching;
 }
 
 export interface SpielOptionen {
   tag: number;
   /** Play-by-Play-Zeilen mitschreiben */
   pbp: boolean;
+  /** Spiele pro Team in der Hauptrunde (skaliert die Dauer von Verletzungen); Standard 82 */
+  saisonLaenge?: number;
 }
 
 type Zug = 'iso' | 'pnr' | 'post' | 'spot' | 'drive' | 'fast' | 'putback';
@@ -47,10 +63,18 @@ interface Live {
   pos: number;
   /** Offensivwert: wie gefährlich der Spieler als Werfer ist */
   offWert: number;
-  nutzung: number;
   zonen: [number, number, number];
   verbrauch: number;
   gegner: Live | null;
+  /** Wurf-Häufigkeit unter Berücksichtigung der Taktik (Fokus) */
+  nutzungEff: number;
+  /** Anpassung aller Attribute durch die Moral (negativ = schlechte Stimmung) */
+  moralAdj: number;
+  /** Ziel-Spielzeit in Sekunden bei eigener Rotation (0 = soll nicht spielen) */
+  zielSek: number;
+  /** Schon vor dem Spiel verletzt */
+  verletzt: boolean;
+  neueVerletzung: { typ: string; spiele: number } | null;
   energie: number;
   imSpiel: boolean;
   /** Spielzeit (gesamt, Sekunden), seit der Spieler aufs Feld kam */
@@ -77,6 +101,16 @@ interface Live {
 
 interface Seite {
   m: Mannschaft;
+  taktik: Taktik;
+  /** Zusammengefasste Wirkung der Taktik */
+  k: Kombi;
+  /** Starting Five bei eigener Rotation (leer: die Starter ergeben sich aus der Rangfolge) */
+  starter: Live[];
+  /** Wirkung der Verteidigung auf den angreifenden Gegner (hängt von den Spielern auf dem Feld ab) */
+  fxTrefferGegner: [number, number, number];
+  fxTurnoverGegner: number;
+  /** Bester Offensivspieler auf dem Feld */
+  stern: Live | null;
   live: Live[];
   feld: Live[];
   punkte: number;
@@ -95,22 +129,34 @@ interface Spielzustand {
   /** Gespielte Zeit insgesamt in Sekunden */
   uhr: number;
   log: string[] | null;
+  saisonLaenge: number;
+  /** Spielmodus des aktuellen Ballbesitzes (Schlussminute) */
+  modus: 'normal' | 'halten' | 'eilen';
+  /** Gerade Beginn der zweiten Halbzeit: Starter werden bevorzugt */
+  halbzeitStart: boolean;
 }
 
 const clamp = (x: number, min: number, max: number) => Math.max(min, Math.min(max, x));
 
 /** Effektiver Attributwert unter Berücksichtigung der Müdigkeit. */
 function w(l: Live, k: AttributKey): number {
-  return 60 + (l.s.attribute[k] - 60) * S.attributWirkung - (100 - l.energie) * S.muedigkeit.attributProPunkt;
+  return 60 + (l.s.attribute[k] - 60) * S.attributWirkung - (100 - l.energie) * S.muedigkeit.attributProPunkt + l.moralAdj;
 }
 
 /** Attributwert ohne Angleichung (für die Frage "wer macht es?": Stars übernehmen mehr Verantwortung). */
 function ra(l: Live, k: AttributKey): number {
-  return l.s.attribute[k] - (100 - l.energie) * S.muedigkeit.attributProPunkt;
+  return l.s.attribute[k] - (100 - l.energie) * S.muedigkeit.attributProPunkt + l.moralAdj;
 }
 
 function kurz(l: Live): string {
   return `${l.s.vorname.charAt(0)}. ${l.s.nachname}`;
+}
+
+function moralAnpassung(moral: number): number {
+  const M = CONFIG.moral;
+  if (moral < M.malusUnter) return -(M.malusUnter - moral) * M.malusProPunkt;
+  if (moral > M.bonusAb) return (moral - M.bonusAb) * M.bonusProPunkt;
+  return 0;
 }
 
 function erzeugeLive(s: Spieler, seite: 0 | 1, rang: number): Live {
@@ -125,7 +171,6 @@ function erzeugeLive(s: Spieler, seite: 0 | 1, rang: number): Live {
     rang,
     pos: POS_INDEX[s.position] ?? 2,
     offWert,
-    nutzung: Math.pow(offWert / 60, S.nutzungExponent),
     zonen: [
       zb[0] * Math.exp((a.dunk - 60) / sk),
       zb[1] * Math.exp((a.mitteldistanz - 60) / sk),
@@ -133,10 +178,15 @@ function erzeugeLive(s: Spieler, seite: 0 | 1, rang: number): Live {
     ],
     verbrauch: S.muedigkeit.verbrauchProSek * Math.pow(S.muedigkeit.ausdauerReferenz / ausd, 0.6),
     gegner: null,
+    nutzungEff: Math.pow(offWert / 60, S.nutzungExponent),
+    moralAdj: moralAnpassung(s.moral),
+    zielSek: 0,
+    verletzt: s.verletzung !== null,
+    neueVerletzung: null,
     energie: 100,
     imSpiel: false,
     seit: 0,
-    draussen: false,
+    draussen: s.verletzung !== null,
     starter: 0,
     min: 0,
     pts: 0,
@@ -159,15 +209,73 @@ function erzeugeLive(s: Spieler, seite: 0 | 1, rang: number): Live {
 
 function erzeugeSeite(m: Mannschaft, index: 0 | 1): Seite {
   const sortiert = [...m.spieler].sort((x, y) => y.ovr - x.ovr || x.id - y.id);
-  return {
+  const live = sortiert.map((s, i) => erzeugeLive(s, index, i));
+  // Sind weniger als 5 Spieler gesund, spielen die am wenigsten verletzten mit.
+  const gesund = live.filter((l) => !l.draussen).length;
+  if (gesund < 5) {
+    const verletzte = live
+      .filter((l) => l.draussen)
+      .sort((a, b) => (a.s.verletzung?.spieleVerbleibend ?? 0) - (b.s.verletzung?.spieleVerbleibend ?? 0));
+    for (const l of verletzte.slice(0, 5 - gesund)) l.draussen = false;
+  }
+  // Der Rang im Kader zählt nur die einsatzbereiten Spieler: fehlen Stars, rücken die anderen nach.
+  let rang = 0;
+  for (const l of live) if (!l.draussen) l.rang = rang++;
+  for (const l of live) if (l.draussen) l.rang = rang++;
+  const taktik = m.coaching?.taktik ?? STANDARD_TAKTIK;
+  const seite: Seite = {
     m,
-    live: sortiert.map((s, i) => erzeugeLive(s, index, i)),
+    taktik,
+    k: kombiVon(taktik),
+    starter: [],
+    fxTrefferGegner: [0, 0, 0],
+    fxTurnoverGegner: 0,
+    stern: null,
+    live,
     feld: [],
     punkte: 0,
     viertel: [],
     teamFouls: 0,
     maxVorsprung: 0,
   };
+  const rot = m.coaching?.rotation;
+  if (rot && !rot.auto) richteRotationEin(seite, rot.minuten, rot.starter);
+  else richteRotationEin(seite, null, []);
+  return seite;
+}
+
+/**
+ * Rotation: Ziel-Spielzeiten (auf 240 Minuten Gesamtspielzeit normiert) und Starting Five.
+ * Ohne Angabe (`minuten` = null, automatische Rotation) gelten die Standard-Minuten nach Rang der
+ * einsatzbereiten Spieler, die Starter ergeben sich aus der Rangfolge.
+ */
+function richteRotationEin(seite: Seite, minuten: Record<string, number> | null, starterIds: number[]): void {
+  const R = S.rotation;
+  const verfuegbar = seite.live.filter((l) => !l.draussen);
+  const ziel = new Map<Live, number>();
+  for (const l of verfuegbar) {
+    const m = minuten ? clamp(minuten[String(l.s.id)] ?? 0, 0, 48) : (R.standardMinuten[l.rang] ?? 0);
+    if (m > 0) ziel.set(l, m);
+  }
+  // Zu wenige Spieler mit Minuten (z. B. wegen Verletzungen): die Besten ergänzen
+  for (const l of verfuegbar) {
+    if (ziel.size >= R.mindestRotation) break;
+    if (!ziel.has(l)) ziel.set(l, R.notfallMinuten);
+  }
+  let summe = 0;
+  for (const m of ziel.values()) summe += m;
+  const faktor = summe > 0 ? (5 * 48 * 60) / summe : 0;
+  for (const [l, m] of ziel) l.zielSek = m * faktor;
+
+  if (!minuten) return;
+  const starter: Live[] = [];
+  for (const id of starterIds) {
+    const l = verfuegbar.find((x) => x.s.id === id);
+    if (l && !starter.includes(l)) starter.push(l);
+  }
+  const rest = verfuegbar.filter((l) => !starter.includes(l)).sort((a, b) => b.zielSek - a.zielSek || a.rang - b.rang);
+  while (starter.length < 5 && rest.length > 0) starter.push(rest.shift() as Live);
+  seite.starter = starter.slice(0, 5);
 }
 
 // ---------- Hilfen ----------
@@ -214,6 +322,46 @@ function ordneZu(a: Seite, b: Seite): void {
     x.gegner = y;
     y.gegner = x;
   }
+  aktualisiereEffekte(a);
+  aktualisiereEffekte(b);
+}
+
+/**
+ * Wirkungen, die von den Spielern auf dem Feld abhängen (neu berechnet nach jedem Wechsel):
+ * Wurfhäufigkeit nach Offensiv-Fokus, bester Offensivspieler und die Eignung der Verteidiger
+ * für Zone und Pressing.
+ */
+function aktualisiereEffekte(seite: Seite): void {
+  const T = S.taktik;
+  const k = seite.k;
+  let best: Live | null = null;
+  for (const l of seite.feld) {
+    let n = Math.pow(l.offWert / 60, S.nutzungExponent + k.nutzungExtra);
+    if (l.pos >= 3) n *= k.nutzungBigs;
+    else if (l.pos <= 1 && k.nutzungBigs > 1) n /= Math.sqrt(k.nutzungBigs);
+    l.nutzungEff = n;
+    if (!best || l.offWert > best.offWert) best = l;
+  }
+  seite.stern = best;
+
+  const n = Math.max(1, seite.feld.length);
+  let innen = 0;
+  let druck = 0;
+  for (const l of seite.feld) {
+    innen += (l.s.attribute.innenDef + l.s.attribute.block) / 2;
+    druck += (l.s.attribute.steal + l.s.attribute.perimeterDef) / 2;
+  }
+  const zoneFit = eignungsFaktor(innen / n);
+  const druckFit = eignungsFaktor(druck / n);
+  const vert = T.verteidigung[seite.taktik.verteidigung];
+  const inten = T.intensitaet[seite.taktik.intensitaet];
+  for (let z = 0; z < 3; z++) {
+    let v = vert.trefferGegner[z] as number;
+    if (seite.taktik.verteidigung === 'zone' && v < 0) v *= zoneFit;
+    seite.fxTrefferGegner[z] = v + (inten.trefferGegner[z] as number);
+  }
+  seite.fxTurnoverGegner =
+    vert.turnoverGegner * (seite.taktik.verteidigung === 'pressing' ? druckFit : 1) + inten.turnoverGegner;
 }
 
 // ---------- Zeit, Punkte ----------
@@ -224,7 +372,7 @@ function zeit(g: Spielzustand, dauer: number): void {
   for (const seite of g.seiten) {
     for (const l of seite.live) {
       if (l.imSpiel) {
-        l.energie = Math.max(0, l.energie - dauer * l.verbrauch);
+        l.energie = Math.max(0, l.energie - dauer * l.verbrauch * seite.k.muedigkeit);
         l.min += dauer;
       } else {
         l.energie = Math.min(100, l.energie + dauer * S.muedigkeit.erholungProSek);
@@ -254,13 +402,12 @@ function istGarbageTime(g: Spielzustand): boolean {
 function rotationsWert(g: Spielzustand, l: Live, garbage: boolean): number {
   if (l.draussen) return -9999;
   const r = S.rotation;
-  // Rangwert statt OVR: Stars und Rollenspieler rücken in der Rotation näher zusammen,
-  // damit auch der Beste regelmäßig pausiert.
-  let wert = 100 - l.rang * r.rangSchritt + (l.energie - 100) * S.muedigkeit.wertungProPunkt;
-  if (garbage) {
-    if (l.starter) wert -= r.garbageStarterAbzug;
-  } else if (l.rang >= 10) wert -= r.abzugRang11;
-  else if (l.rang >= 8) wert -= r.abzugRang9;
+  // Wer hinter seiner Ziel-Spielzeit liegt, kommt aufs Feld; Müdigkeit zählt mit.
+  if (l.zielSek <= 0) return -500 - l.rang;
+  const soll = l.zielSek * (g.uhr / (4 * S.viertelSekunden));
+  let wert = ((soll - l.min) / 60) * r.defizitProMinute + (l.energie - 100) * S.muedigkeit.wertungProPunkt - l.rang * 0.01;
+  if (g.halbzeitStart && l.starter) wert += r.starterNachHalbzeit;
+  if (garbage && l.starter) wert -= r.garbageStarterAbzug;
   // Foulprobleme: wer bald ausfoult, setzt lieber aus
   if (l.pf >= S.ausgefoult - 1 && g.periode < 3) wert -= r.foulProblem5;
   if (l.imSpiel) wert += r.traegheit;
@@ -301,7 +448,8 @@ function waehleAufstellung(g: Spielzustand, seite: Seite): Live[] {
 function wechsle(g: Spielzustand, frei: boolean): void {
   let geaendert = false;
   for (const seite of g.seiten) {
-    const soll = waehleAufstellung(g, seite);
+    const startet = seite.feld.length === 0 && seite.starter.length === 5;
+    const soll = startet ? seite.starter : waehleAufstellung(g, seite);
     if (soll.length < 5) continue;
     if (seite.feld.length === 0) {
       seite.feld = soll;
@@ -334,8 +482,8 @@ function wechsle(g: Spielzustand, frei: boolean): void {
 
 function waehleZug(g: Spielzustand, off: Seite, art: Art): Zug {
   if (art === 'putback') return 'putback';
-  if (art === 'steal' && g.rng.chance(S.fastbreak.nachSteal)) return 'fast';
-  if (art === 'defReb' && g.rng.chance(S.fastbreak.nachRebound)) return 'fast';
+  if (art === 'steal' && g.rng.chance(S.fastbreak.nachSteal * off.k.fast)) return 'fast';
+  if (art === 'defReb' && g.rng.chance(S.fastbreak.nachRebound * off.k.fast)) return 'fast';
 
   const f = off.feld;
   let maxBh = 0;
@@ -351,20 +499,25 @@ function waehleZug(g: Spielzustand, off: Seite, art: Art): Zug {
     speedSumme += w(l, 'speed');
   }
   const z = S.zugGewichte;
+  const zk = off.k.zuege;
   const gew = [
-    z.iso * Math.pow(maxOff / 65, 2),
-    z.pnr * Math.pow(maxBh / 60, 1.5),
-    z.post * (bestPost === 0 ? 0.2 : Math.pow(bestPost / 60, 2)),
-    z.spot * Math.pow(dreierSumme / 5 / 60, 2),
-    z.drive * (speedSumme / 5 / 60),
+    z.iso * zk.iso * Math.pow(maxOff / 65, 2),
+    z.pnr * zk.pnr * Math.pow(maxBh / 60, 1.5),
+    z.post * zk.post * (bestPost === 0 ? 0.2 : Math.pow(bestPost / 60, 2)),
+    z.spot * zk.spot * Math.pow(dreierSumme / 5 / 60, 2),
+    z.drive * zk.drive * (speedSumme / 5 / 60),
   ];
   const zuege: Zug[] = ['iso', 'pnr', 'post', 'spot', 'drive'];
   return zuege[g.rng.gewichtet(gew)] as Zug;
 }
 
-function ziehDauer(g: Spielzustand, zug: Zug): number {
+function ziehDauer(g: Spielzustand, zug: Zug, off: Seite): number {
+  const E = S.endspiel;
+  if (g.modus === 'halten') return clamp(g.rng.normal(E.haltenDauer[0], E.haltenDauer[1]), 8, 24);
   const [mittel, streu] = S.dauer[zug];
-  return clamp(g.rng.normal(mittel, streu) * S.tempoFaktor, 2, 24);
+  let d = g.rng.normal(mittel, streu) * S.tempoFaktor * off.k.dauer;
+  if (g.modus === 'eilen') d *= E.eilenDauer;
+  return clamp(d, 2, 24);
 }
 
 interface Wurf {
@@ -375,7 +528,16 @@ interface Wurf {
 }
 
 function waehleZone(g: Spielzustand, l: Live): Zone {
-  return g.rng.gewichtet(l.zonen) as Zone;
+  const zf = (g.seiten[l.seite] as Seite).k.zonen;
+  const rueckstand = (g.seiten[l.seite === 0 ? 1 : 0] as Seite).punkte - (g.seiten[l.seite] as Seite).punkte;
+  const dreierEile = g.modus === 'eilen' && rueckstand >= 3 ? S.endspiel.eilenDreier : 1;
+  // Letzter Angriff bei genau 3 Punkten Rückstand: Es wird auf den Ausgleich geworfen.
+  if (g.modus === 'eilen' && rueckstand === 3 && g.sek <= S.endspiel.ausgleichswurfSekunden) return ZONE_DREIER;
+  return g.rng.gewichtet([
+    l.zonen[0] * zf[0],
+    l.zonen[1] * zf[1],
+    l.zonen[2] * zf[2] * dreierEile,
+  ]) as Zone;
 }
 
 function waehleWurf(g: Spielzustand, off: Seite, zug: Zug, letzterRebounder: Live | null): Wurf {
@@ -386,40 +548,40 @@ function waehleWurf(g: Spielzustand, off: Seite, zug: Zug, letzterRebounder: Liv
       const s =
         letzterRebounder && g.rng.chance(0.6)
           ? letzterRebounder
-          : waehle(g, f, (l) => l.nutzung);
+          : waehle(g, f, (l) => l.nutzungEff);
       const zone: Zone = g.rng.chance(0.85) ? ZONE_RING : g.rng.chance(0.5) ? ZONE_MITTE : ZONE_DREIER;
       return { schuetze: s, zone, assistChance: 0 };
     }
     case 'iso': {
-      const s = waehle(g, f, (l) => l.nutzung * Math.pow(ra(l, 'ballhandling') / 60, 2));
+      const s = waehle(g, f, (l) => l.nutzungEff * Math.pow(ra(l, 'ballhandling') / 60, 2));
       return { schuetze: s, zone: waehleZone(g, s), assistChance: A.iso };
     }
     case 'pnr': {
       if (g.rng.chance(0.55)) {
-        const s = waehle(g, f, (l) => l.nutzung * Math.pow(ra(l, 'ballhandling') / 60, 2));
+        const s = waehle(g, f, (l) => l.nutzungEff * Math.pow(ra(l, 'ballhandling') / 60, 2));
         return { schuetze: s, zone: waehleZone(g, s), assistChance: A.pnrHandler };
       }
-      const s = waehle(g, f, (l) => l.nutzung * Math.pow(ra(l, 'dunk') / 60, 2) * (l.pos >= 3 ? 1.5 : 0.7));
+      const s = waehle(g, f, (l) => l.nutzungEff * Math.pow(ra(l, 'dunk') / 60, 2) * (l.pos >= 3 ? 1.5 : 0.7));
       return { schuetze: s, zone: g.rng.chance(0.9) ? ZONE_RING : ZONE_MITTE, assistChance: A.pnrRoller };
     }
     case 'post': {
-      const s = waehle(g, f, (l) => l.nutzung * Math.pow(ra(l, 'postMoves') / 60, 2) * (l.pos >= 3 ? 1.5 : 0.5));
+      const s = waehle(g, f, (l) => l.nutzungEff * Math.pow(ra(l, 'postMoves') / 60, 2) * (l.pos >= 3 ? 1.5 : 0.5));
       return { schuetze: s, zone: g.rng.chance(0.72) ? ZONE_RING : ZONE_MITTE, assistChance: A.post };
     }
     case 'spot': {
-      const s = waehle(g, f, (l) => l.nutzung * Math.pow(ra(l, 'dreier') / 60, 2));
+      const s = waehle(g, f, (l) => l.nutzungEff * Math.pow(ra(l, 'dreier') / 60, 2));
       return { schuetze: s, zone: g.rng.chance(0.85) ? ZONE_DREIER : ZONE_MITTE, assistChance: A.spot };
     }
     case 'drive': {
       if (g.rng.chance(0.45)) {
-        const s = waehle(g, f, (l) => l.nutzung * Math.pow((ra(l, 'speed') + ra(l, 'dunk')) / 120, 2));
+        const s = waehle(g, f, (l) => l.nutzungEff * Math.pow((ra(l, 'speed') + ra(l, 'dunk')) / 120, 2));
         return { schuetze: s, zone: ZONE_RING, assistChance: A.driveRim };
       }
-      const s = waehle(g, f, (l) => l.nutzung * Math.pow(ra(l, 'dreier') / 60, 2));
+      const s = waehle(g, f, (l) => l.nutzungEff * Math.pow(ra(l, 'dreier') / 60, 2));
       return { schuetze: s, zone: g.rng.chance(0.9) ? ZONE_DREIER : ZONE_MITTE, assistChance: A.driveKick };
     }
     case 'fast': {
-      const s = waehle(g, f, (l) => l.nutzung * Math.pow(ra(l, 'speed') / 60, 2));
+      const s = waehle(g, f, (l) => l.nutzungEff * Math.pow(ra(l, 'speed') / 60, 2));
       return { schuetze: s, zone: g.rng.chance(0.78) ? ZONE_RING : ZONE_DREIER, assistChance: A.fast };
     }
   }
@@ -467,11 +629,16 @@ function trefferChance(g: Spielzustand, wurf: Wurf, zug: Zug, off: Seite, def: S
     if (n > 0) p -= (hilfe / n - 55) * t.hilfeProPunkt;
   }
   p += (w(l, 'spielIq') - 60) * t.iqProPunkt;
+  p += off.k.trefferEigen[z] + def.fxTrefferGegner[z];
+  if (l === off.stern) p += off.k.trefferStar;
   if (zug === 'spot' || (zug === 'drive' && z !== ZONE_RING)) p += t.frei;
   if (zug === 'putback') p += 0.04;
   // Spielverlauf: Wer klar führt, spielt lockerer/verwaltet den Vorsprung, wer zurückliegt, kämpft.
   // Das hält die Abstände realistisch (ohne Ausgleich gäbe es zu viele Kantersiege).
-  p -= S.ausgleich * clamp(off.punkte - def.punkte, -S.ausgleichMaxAbstand, S.ausgleichMaxAbstand);
+  // In der engen Schlussphase gilt der Ausgleich stärker (der Rückstand wird mit aller Kraft bekämpft).
+  const C = S.endspiel.clutch;
+  const eng = g.periode >= 3 && g.sek <= C.sekunden && Math.abs(off.punkte - def.punkte) <= C.abstand;
+  p -= S.ausgleich * (eng ? C.faktor : 1) * clamp(off.punkte - def.punkte, -S.ausgleichMaxAbstand, S.ausgleichMaxAbstand);
   if (off === g.seiten[0]) p += S.heimvorteil / 2;
   else p -= S.heimvorteil / 2;
   return clamp(p, t.min, t.max);
@@ -520,7 +687,11 @@ function rebound(g: Spielzustand, off: Seite, def: Seite, faktor: number): { off
   const rb = S.rebound;
   const meanOff = off.feld.reduce((s, l) => s + w(l, 'reboundOff'), 0) / off.feld.length;
   const meanDef = def.feld.reduce((s, l) => s + w(l, 'reboundDef'), 0) / def.feld.length;
-  const p = clamp(rb.offensivBasis * Math.pow(meanOff / Math.max(meanDef, 20), 2) * faktor, rb.min * faktor, rb.max * faktor);
+  const p = clamp(
+    rb.offensivBasis * Math.pow(meanOff / Math.max(meanDef, 20), 2) * faktor * off.k.oreb,
+    rb.min * faktor,
+    rb.max * faktor,
+  );
   const gewicht = (l: Live, k: AttributKey) =>
     Math.pow(Math.max(ra(l, k), 20) / 60, 2) * Math.exp((l.s.groesseCm - 200) / 24);
   // Ein Teil der Fehlwürfe geht ins Aus: Team-Rebound ohne Spielerwertung
@@ -538,22 +709,73 @@ function rebound(g: Spielzustand, off: Seite, def: Seite, faktor: number): { off
   return { offensiv: false, l };
 }
 
-/** Ein kompletter Ballbesitz. */
+/** Ein Ballbesitz samt anschließender Verletzungsprüfung. */
 function gang(g: Spielzustand, offIdx: 0 | 1, art: Art, rebounder: Live | null): Weiter {
+  const t0 = g.uhr;
+  const res = gangKern(g, offIdx, art, rebounder);
+  pruefeVerletzungen(g, g.uhr - t0);
+  return res;
+}
+
+/** Wer verletzt sich in den letzten Sekunden? Verletzte Spieler verlassen sofort das Feld. */
+function pruefeVerletzungen(g: Spielzustand, dauer: number): void {
+  if (dauer <= 0) return;
+  const V = CONFIG.verletzungen;
+  for (const seite of g.seiten) {
+    for (const l of seite.feld) {
+      if (l.draussen || l.neueVerletzung) continue;
+      const p = V.rateProSekunde * dauer * anfaelligkeit(l.s);
+      if (!g.rng.chance(p)) continue;
+      const v = wuerfleVerletzung(g.rng, g.saisonLaenge);
+      l.neueVerletzung = v;
+      l.draussen = true;
+      logge(g, seite, `${kurz(l)} verletzt sich (${v.typ}) und muss raus`);
+    }
+  }
+}
+
+/** Das zurückliegende Team foult absichtlich, um die Uhr anzuhalten. */
+function absichtlichesFoul(g: Spielzustand, off: Seite, def: Seite, offIdx: 0 | 1): Weiter {
+  const E = S.endspiel;
+  zeit(g, Math.min(g.sek, g.rng.range(E.foulDauer[0], E.foulDauer[1])));
+  const frei = def.feld.filter((l) => l.pf < S.ausgefoult - 1);
+  const foulender = waehle(g, frei.length > 0 ? frei : def.feld, (l) => 1 + (S.ausgefoult - l.pf));
+  // Gefoult wird, wer den Ball hat: eher die schwächeren Freiwerfer
+  const gefoult = waehle(g, off.feld, (l) => 105 - l.s.attribute.freiwurf);
+  begeheFoul(def, foulender);
+  logge(g, off, `Absichtliches Foul von ${kurz(foulender)} an ${kurz(gefoult)}`);
+  if (def.teamFouls >= S.bonusAb) return freiwuerfe(g, off, def, gefoult, 2);
+  return { naechster: offIdx, art: 'normal' };
+}
+
+/** Ein kompletter Ballbesitz. */
+function gangKern(g: Spielzustand, offIdx: 0 | 1, art: Art, rebounder: Live | null): Weiter {
   const off = g.seiten[offIdx];
   const defIdx: 0 | 1 = offIdx === 0 ? 1 : 0;
   const def = g.seiten[defIdx];
   const T = S.turnover;
   const abgabe: Weiter = { naechster: defIdx, art: 'normal' };
 
+  // Schlussminute: Wer führt, lässt die Uhr laufen; wer zurückliegt, foult oder wirft schnell.
+  g.modus = 'normal';
+  if (g.periode >= 3) {
+    const E = S.endspiel;
+    const vorsprung = off.punkte - def.punkte;
+    if (vorsprung > 0 && g.sek <= E.foulenAb && vorsprung <= E.foulenRueckstand + g.sek / E.foulenTeiler && art !== 'putback') {
+      return absichtlichesFoul(g, off, def, offIdx);
+    }
+    if (vorsprung > 0 && vorsprung <= E.haltenVorsprungMax && g.sek <= E.haltenAb) g.modus = 'halten';
+    else if (vorsprung < 0 && g.sek <= E.eilenAb) g.modus = 'eilen';
+  }
+
   const zug = waehleZug(g, off, art);
-  const dauer = Math.min(g.sek, ziehDauer(g, zug));
+  const dauer = Math.min(g.sek, ziehDauer(g, zug, off));
   zeit(g, dauer);
 
   // 1. Foul des Verteidigers vor dem Wurf
-  if (zug !== 'putback' && g.rng.chance(S.foulOhneWurf)) {
+  if (zug !== 'putback' && g.rng.chance(S.foulOhneWurf * def.k.foulOhneWurf)) {
     const foulender = waehleFoulenden(g, def);
-    const gefoult = waehle(g, off.feld, (l) => l.nutzung);
+    const gefoult = waehle(g, off.feld, (l) => l.nutzungEff);
     begeheFoul(def, foulender);
     if (def.teamFouls >= S.bonusAb) {
       logge(g, off, `Foul von ${kurz(foulender)}, ${kurz(gefoult)} an der Linie`);
@@ -569,14 +791,18 @@ function gang(g: Spielzustand, offIdx: 0 | 1, art: Art, rebounder: Live | null):
     let druck = 0;
     for (const l of off.feld) handler += (w(l, 'ballhandling') + w(l, 'passen')) / 2;
     for (const l of def.feld) druck += (w(l, 'perimeterDef') + w(l, 'steal')) / 2;
-    pTo = clamp(T.basis + (druck / 5 - handler / 5) * T.proPunkt, T.min, T.max);
+    pTo = clamp(
+      T.basis + (druck / 5 - handler / 5) * T.proPunkt + off.k.turnoverEigen + def.fxTurnoverGegner,
+      T.min,
+      T.max,
+    );
     if (zug === 'fast') pTo = T.fastbreak;
     if (zug === 'putback') pTo = 0.04;
   }
   if (g.rng.chance(pTo)) {
-    const verlierer = waehle(g, off.feld, (l) => l.nutzung * (140 - ra(l, 'ballhandling')));
+    const verlierer = waehle(g, off.feld, (l) => l.nutzungEff * (140 - ra(l, 'ballhandling')));
     verlierer.to++;
-    if (g.rng.chance(T.stealAnteil)) {
+    if (g.rng.chance(T.stealAnteil + def.k.stealAnteil)) {
       const dieb = waehle(g, def.feld, (l) => Math.pow(Math.max(ra(l, 'steal'), 20) / 60, 2));
       dieb.stl++;
       logge(g, off, `Ballverlust von ${kurz(verlierer)}, Steal ${kurz(dieb)}`);
@@ -623,7 +849,7 @@ function gang(g: Spielzustand, offIdx: 0 | 1, art: Art, rebounder: Live | null):
 
   // Foul beim Wurf
   const ziehen = clamp(Math.pow(l.offWert / 60, 1.5), 0.6, 1.8);
-  if (g.rng.chance(S.foulBeimWurf[z] * ziehen)) {
+  if (g.rng.chance(S.foulBeimWurf[z] * ziehen * def.k.foulBeimWurf)) {
     const foulender = d && g.rng.chance(0.75) ? d : waehleFoulenden(g, def);
     begeheFoul(def, foulender);
     const getroffen = g.rng.chance(pTreffer * 0.8);
@@ -664,7 +890,7 @@ function gang(g: Spielzustand, offIdx: 0 | 1, art: Art, rebounder: Live | null):
 }
 
 function vergibAssist(g: Spielzustand, off: Seite, schuetze: Live, chance: number): Live | null {
-  if (chance <= 0 || !g.rng.chance(Math.min(0.97, chance * S.assistFaktor))) return null;
+  if (chance <= 0 || !g.rng.chance(Math.min(0.97, chance * S.assistFaktor * off.k.assist))) return null;
   const kandidaten = off.feld.filter((x) => x !== schuetze);
   const a = waehle(g, kandidaten, (x) => Math.pow(Math.max(ra(x, 'passen'), 20) / 60, 3) * (ra(x, 'ballhandling') / 60));
   a.ast++;
@@ -716,7 +942,9 @@ function beginnePeriode(g: Spielzustand, periode: number): void {
     const bonus = periode === 2 ? S.muedigkeit.erholungHalbzeit : S.muedigkeit.erholungViertel;
     for (const s of g.seiten) for (const l of s.live) l.energie = Math.min(100, l.energie + bonus);
   }
+  g.halbzeitStart = periode === 2;
   wechsle(g, true);
+  g.halbzeitStart = false;
   if (periode === 0) {
     for (const s of g.seiten) for (const l of s.feld) l.starter = 1;
   }
@@ -731,6 +959,9 @@ export function simuliereSpiel(rng: Rng, heim: Mannschaft, gast: Mannschaft, opt
     sek: 0,
     uhr: 0,
     log: opt.pbp ? [] : null,
+    saisonLaenge: opt.saisonLaenge ?? 82,
+    modus: 'normal',
+    halbzeitStart: false,
   };
 
   // Sprungball: wer ihn gewinnt, startet Viertel 1 und 4 mit Ball, der andere Viertel 2 und 3.
@@ -770,6 +1001,15 @@ export function simuliereSpiel(rng: Rng, heim: Mannschaft, gast: Mannschaft, opt
     ot,
     text: '',
   };
+  const verletzungen: NeueVerletzung[] = [];
+  for (const seite of g.seiten) {
+    for (const l of seite.live) {
+      if (l.neueVerletzung) {
+        verletzungen.push({ spielerId: l.s.id, teamId: seite.m.teamId, typ: l.neueVerletzung.typ, spiele: l.neueVerletzung.spiele });
+      }
+    }
+  }
+  if (verletzungen.length > 0) ergebnis.verletzungen = verletzungen;
   ergebnis.text = spielText(g, ergebnis);
   if (g.log) ergebnis.pbp = g.log;
   return ergebnis;
@@ -814,5 +1054,13 @@ function spielText(g: Spielzustand, erg: SpielErgebnis): string {
 
   const gegenStar = topWert(verlierer, (l) => l.pts);
   const gegen = gegenStar.pts >= 30 ? ` Bei ${V1} hält ${gegenStar.s.vorname} ${gegenStar.s.nachname} mit ${gegenStar.pts} Punkten dagegen.` : '';
-  return satz + zusatz + gegen;
+  const verletzte = [...a.live, ...b.live].filter((l) => l.neueVerletzung);
+  const verl =
+    verletzte.length === 0
+      ? ''
+      : ' ' +
+        verletzte
+          .map((l) => `${l.s.vorname} ${l.s.nachname} (${l.seite === 0 ? a.m.name : b.m.name}) verletzt sich: ${(l.neueVerletzung as { typ: string }).typ}.`)
+          .join(' ');
+  return satz + zusatz + gegen + verl;
 }

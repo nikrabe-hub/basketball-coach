@@ -1,7 +1,7 @@
 import { CONFIG } from '../engine/config';
 import { generiereLiga } from '../engine/league';
 import { leererStand } from '../engine/stats';
-import type { Coach, SpielDaten } from '../engine/types';
+import { standardCoaching, type Coach, type SpielDaten, type Spieler } from '../engine/types';
 import type { SaveRecord } from './types';
 
 /**
@@ -34,7 +34,7 @@ export const MIGRATIONEN: Record<number, Migration> = {
         liga,
         userTeamId: 0,
         einstellungen: { pbp: true },
-      },
+      } as unknown as SpielDaten,
     };
   },
 
@@ -57,6 +57,27 @@ export const MIGRATIONEN: Record<number, Migration> = {
           stand: leererStand(liga.teams.length),
         },
         einstellungen: { pbp: true },
+      },
+    };
+  },
+
+  /**
+   * Format 3 -> 4 (Meilenstein 4): Moral und Verletzungen der Spieler, Rotation/Taktik des
+   * eigenen Teams (automatisch, Standard-Taktik) und der Posteingang.
+   */
+  3: (record) => {
+    const alt = record.daten as unknown as SpielDaten;
+    const spieler = alt.liga.spieler.map(
+      (s): Spieler => ({ ...s, moral: s.moral ?? CONFIG.moral.start, verletzung: s.verletzung ?? null }),
+    );
+    return {
+      ...record,
+      version: 4,
+      daten: {
+        ...alt,
+        liga: { ...alt.liga, spieler },
+        coaching: alt.coaching ?? standardCoaching(),
+        posteingang: alt.posteingang ?? [],
       },
     };
   },

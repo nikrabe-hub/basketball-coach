@@ -5,12 +5,18 @@ import {
   eigeneErgebnisse,
   hauptrundeVorbei,
   naechsterEigenerSpieltag,
-  simuliereBis,
+  simuliereBis as simuliereBisMitStopp,
   simuliereTag,
   zielTag,
 } from './season';
 import { siegQuote, sortiereTabelle, spiele } from './stats';
 import { neuesSpiel, type SpielDaten } from './types';
+
+/** Simuliert bis zum Ziel und macht nach Stopps wegen wichtiger Meldungen (Verletzungen) einfach weiter. */
+function simuliereBis(sp: SpielDaten, ziel: number, opt: Parameters<typeof simuliereBisMitStopp>[2] = {}): void {
+  const ende = Math.min(ziel, sp.liga.spielplan.length);
+  while (sp.liga.tag < ende) simuliereBisMitStopp(sp, ziel, opt);
+}
 
 function neu(seed = 7, laenge = 29, team = 5): SpielDaten {
   return neuesSpiel('Test', 40, seed, generiereLiga(seed, laenge), team);

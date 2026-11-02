@@ -3,7 +3,8 @@ import { simuliereSpiel, type Mannschaft } from './game';
 import { kaderVon } from './league';
 import { mischeSeed, Rng } from './rng';
 import { verbucheErgebnis } from './stats';
-import type { Liga, SpielDaten, SpielErgebnis } from './types';
+import type { Coaching, Liga, SpielDaten, SpielErgebnis } from './types';
+import { verarbeiteSpielZustand } from './zustand';
 
 /** Wie viele eigene Spiele ihren Play-by-Play behalten. */
 const PBP_BEHALTEN = 10;
@@ -17,10 +18,12 @@ export const ZIEL_TEXT: Record<SimulationsZiel, string> = {
   saisonende: 'Bis zum Saisonende',
 };
 
-export function mannschaftVon(liga: Liga, teamId: number): Mannschaft {
+export function mannschaftVon(liga: Liga, teamId: number, coaching?: Coaching): Mannschaft {
   const t = liga.teams[teamId];
   if (!t) throw new Error(`Unbekanntes Team ${teamId}`);
-  return { teamId, name: t.name, kuerzel: t.kuerzel, spieler: kaderVon(liga, teamId) };
+  const m: Mannschaft = { teamId, name: t.name, kuerzel: t.kuerzel, spieler: kaderVon(liga, teamId) };
+  if (coaching) m.coaching = coaching;
+  return m;
 }
 
 /** Seed eines einzelnen Spiels: hängt nur von Liga, Saison, Tag und Position im Spielplan ab. */
@@ -79,7 +82,7 @@ export function simuliereTag(spiel: SpielDaten): SpielErgebnis[] {
   const holen = (id: number) => {
     let m = mannschaften.get(id);
     if (!m) {
-      m = mannschaftVon(liga, id);
+      m = mannschaftVon(liga, id, id === spiel.userTeamId ? spiel.coaching : undefined);
       mannschaften.set(id, m);
     }
     return m;
@@ -92,8 +95,10 @@ export function simuliereTag(spiel: SpielDaten): SpielErgebnis[] {
     const erg = simuliereSpiel(rng, holen(sp.heim), holen(sp.gast), {
       tag,
       pbp: eigenes && spiel.einstellungen.pbp,
+      saisonLaenge: liga.saisonLaenge,
     });
     verbucheErgebnis(liga, erg);
+    verarbeiteSpielZustand(spiel, erg);
     ergebnisse.push(erg);
   });
   liga.ergebnisse[tag] = ergebnisse;
@@ -120,14 +125,30 @@ export interface SimulationsOptionen {
   onFortschritt?: (tagFertig: number, tagZiel: number) => void;
 }
 
-/** Simuliert alle Tage bis `ziel` (ausschließlich). Verändert `spiel`. */
-export function simuliereBis(spiel: SpielDaten, ziel: number, opt: SimulationsOptionen = {}): void {
+/**
+ * Simuliert alle Tage bis `ziel` (ausschließlich). Verändert `spiel`.
+ * Hält früher an, wenn am letzten Tag eine wichtige Meldung (zum Beispiel eine schwere Verletzung
+ * im eigenen Team) in den Posteingang kam. Rückgabe: true, wenn das Ziel erreicht wurde.
+ */
+export function simuliereBis(spiel: SpielDaten, ziel: number, opt: SimulationsOptionen = {}): boolean {
   const start = spiel.liga.tag;
   const ende = Math.min(ziel, spiel.liga.spielplan.length);
   while (spiel.liga.tag < ende) {
+    const letzteId = hoechsteNachrichtenId(spiel);
     simuliereTag(spiel);
     opt.onFortschritt?.(spiel.liga.tag - start, ende - start);
+    if (spiel.liga.tag < ende && hatNeueWichtigeNachricht(spiel, letzteId)) return false;
   }
+  return true;
+}
+
+export function hoechsteNachrichtenId(spiel: SpielDaten): number {
+  return spiel.posteingang.reduce((m, n) => Math.max(m, n.id), 0);
+}
+
+/** Gibt es seit der Nachricht mit der Nummer `letzteId` eine wichtige Meldung? */
+export function hatNeueWichtigeNachricht(spiel: SpielDaten, letzteId: number): boolean {
+  return spiel.posteingang.some((n) => n.id > letzteId && n.wichtig);
 }
 
 /** Alle bisherigen Ergebnisse des eigenen Teams, neueste zuletzt. */

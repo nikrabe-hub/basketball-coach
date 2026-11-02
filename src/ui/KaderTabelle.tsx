@@ -1,6 +1,6 @@
 import { kaderVon } from '../engine/league';
 import type { Liga, Spieler } from '../engine/types';
-import { fmtGeldKurz, wertKlasse } from './format';
+import { fmtGeldKurz, moralKlasse, wertKlasse } from './format';
 import { SortTable, type Spalte } from './SortTable';
 
 export function kurzName(s: Spieler): string {
@@ -12,6 +12,22 @@ const SPALTEN: Spalte<Spieler>[] = [
   { key: 'pos', label: 'Pos', wert: (s) => ['PG', 'SG', 'SF', 'PF', 'C'].indexOf(s.position), anzeige: (s) => s.position, zahl: true },
   { key: 'ovr', label: 'OVR', wert: (s) => s.ovr, klasse: (s) => `fett ${wertKlasse(s.ovr)}`, zahl: true },
   { key: 'pot', label: 'POT', wert: (s) => s.pot, klasse: (s) => wertKlasse(s.pot), zahl: true },
+  {
+    key: 'moral',
+    label: 'Moral',
+    wert: (s) => s.moral,
+    anzeige: (s) => Math.round(s.moral),
+    klasse: (s) => moralKlasse(s.moral),
+    zahl: true,
+  },
+  {
+    key: 'status',
+    label: 'Status',
+    wert: (s) => s.verletzung?.spieleVerbleibend ?? 0,
+    anzeige: (s) => (s.verletzung ? `🩹 ${s.verletzung.spieleVerbleibend} Sp.` : 'fit'),
+    klasse: (s) => (s.verletzung ? 'w-schwach' : 'w-gut'),
+    zahl: true,
+  },
   { key: 'alter', label: 'Alter', wert: (s) => s.alter, zahl: true },
   { key: 'gehalt', label: 'Gehalt', wert: (s) => s.vertrag.gehalt, anzeige: (s) => fmtGeldKurz(s.vertrag.gehalt), zahl: true },
   { key: 'jahre', label: 'Jahre', wert: (s) => s.vertrag.jahre, zahl: true },

@@ -507,3 +507,32 @@ button.slot {
 .stat-feld { display: flex; flex-direction: column; align-items: center; }
 .stat-feld strong { font-size: 1.05rem; font-variant-numeric: tabular-nums; }
 .stat-feld span { font-size: 0.7rem; color: var(--text-leise); }
+
+/* ---------- Meilenstein 4a: Rotation, Taktik, Posteingang ---------- */
+
+.rotation-liste { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
+.rot-zeile { background: var(--bg-karte); border: 1px solid var(--rand); border-radius: var(--radius); padding: 10px 12px; }
+.rot-zeile.verletzt { opacity: 0.6; }
+.rot-kopf { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.rot-name { display: flex; align-items: baseline; gap: 8px; min-height: 44px; padding: 0; border: 0; background: none; color: var(--text); font: inherit; cursor: pointer; flex: 1; text-align: left; }
+.rot-pos { color: var(--text-leise); font-size: 0.8rem; }
+.rot-moral { font-size: 0.8rem; }
+.rot-starter { display: flex; align-items: center; gap: 6px; min-height: 44px; font-size: 0.85rem; cursor: pointer; }
+.rot-starter input { width: 22px; height: 22px; accent-color: var(--akzent); }
+.rot-regler { display: flex; align-items: center; gap: 12px; }
+.rot-regler input[type='range'] { flex: 1; min-height: 44px; accent-color: var(--akzent); }
+.rot-min { width: 58px; text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; }
+.rot-verletzt { margin: 4px 0 0; color: var(--schlecht); font-size: 0.9rem; }
+
+.verletzt-zeile { display: flex; justify-content: space-between; gap: 10px; width: 100%; min-height: 44px; align-items: center; padding: 0; border: 0; background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+
+.abzeichen { display: inline-block; margin-left: 8px; min-width: 22px; padding: 0 7px; border-radius: 11px; background: var(--akzent); color: var(--akzent-text); font-size: 0.75rem; line-height: 22px; text-align: center; vertical-align: middle; }
+.nachrichten { display: flex; flex-direction: column; gap: 6px; }
+.nachricht { display: flex; gap: 10px; width: 100%; padding: 10px; border: 1px solid var(--rand); border-radius: 10px; background: var(--bg); color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.nachricht:disabled { cursor: default; }
+.nachricht.neu { background: var(--bg-karte-hell); border-color: var(--akzent); }
+.nachricht.wichtig .nachricht-icon { filter: none; }
+.nachricht-text { display: flex; flex-direction: column; gap: 2px; font-size: 0.92rem; }
+.nachricht-text small { color: var(--text-leise); font-size: 0.75rem; }
+.karte.stopp { border-color: var(--akzent); }
+.textknopf { padding: 0; border: 0; background: none; color: var(--akzent); font: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; min-height: 32px; }

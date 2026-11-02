@@ -94,22 +94,46 @@ describe('SaveStore', () => {
     expect((await db.saves.get(1))?.version).toBe(CONFIG.saveVersion);
   });
 
-  it('hebt einen Spielstand aus Meilenstein 2 (Format 2) auf Format 3: leere Tabellen und Einstellungen', async () => {
+  it('hebt einen Spielstand aus Meilenstein 2 (Format 2) auf die aktuelle Version: leere Tabellen, Einstellungen, Moral', async () => {
     const m2 = structuredClone(spiel('Zwei')) as unknown as Record<string, unknown>;
     const ligaAlt = structuredClone(liga) as unknown as Record<string, unknown>;
     delete ligaAlt.ergebnisse;
     delete ligaAlt.stand;
     m2.liga = ligaAlt;
     delete m2.einstellungen;
+    delete m2.coaching;
+    delete m2.posteingang;
     await db.saves.put({ slot: 2, version: 2, erstelltAm: 1, geaendertAm: 2, daten: m2 } as unknown as SaveRecord);
 
     const geladen = await store.laden(2);
-    expect(geladen?.version).toBe(3);
+    expect(geladen?.version).toBe(CONFIG.saveVersion);
     expect(geladen?.daten.einstellungen).toEqual({ pbp: true });
     expect(geladen?.daten.liga.ergebnisse).toEqual([]);
     expect(geladen?.daten.liga.stand.teams).toHaveLength(30);
     expect(geladen?.daten.liga.stand.teams[0]?.siege).toBe(0);
     expect(geladen?.daten.liga.teams).toHaveLength(30);
+    expect(geladen?.daten.coaching.rotation.auto).toBe(true);
+    expect(geladen?.daten.posteingang).toEqual([]);
+  });
+
+  it('hebt einen Spielstand aus Meilenstein 3 (Format 3) auf Format 4: Moral, Verletzungen, Coaching, Posteingang', async () => {
+    const m3 = structuredClone(spiel('Drei')) as unknown as Record<string, unknown>;
+    delete m3.coaching;
+    delete m3.posteingang;
+    const ligaAlt = structuredClone(liga);
+    ligaAlt.spieler.forEach((s) => {
+      delete (s as unknown as Record<string, unknown>).moral;
+      delete (s as unknown as Record<string, unknown>).verletzung;
+    });
+    m3.liga = ligaAlt;
+    await db.saves.put({ slot: 3, version: 3, erstelltAm: 1, geaendertAm: 2, daten: m3 } as unknown as SaveRecord);
+
+    const geladen = await store.laden(3);
+    expect(geladen?.version).toBe(4);
+    expect(geladen?.daten.liga.spieler.every((s) => s.moral === CONFIG.moral.start && s.verletzung === null)).toBe(true);
+    expect(geladen?.daten.coaching.taktik.verteidigung).toBe('mann');
+    expect(geladen?.daten.coaching.rotation).toEqual({ auto: true, starter: [], minuten: {} });
+    expect(geladen?.daten.posteingang).toEqual([]);
   });
 });
 

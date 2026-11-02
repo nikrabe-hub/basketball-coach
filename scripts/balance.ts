@@ -7,6 +7,7 @@
  */
 import { CONFIG } from '../src/engine/config';
 import { generiereLiga, staerkeRang } from '../src/engine/league';
+import { schwerAb } from '../src/engine/injuries';
 import { simuliereBis } from '../src/engine/season';
 import { BX, quote } from '../src/engine/stats';
 import { neuesSpiel } from '../src/engine/types';
@@ -32,6 +33,7 @@ interface Summen {
   to: number;
   pf: number;
   ot: number;
+  otSpiele: number;
   spiele: number;
   heimSiege: number;
   starterMin: number[];
@@ -41,7 +43,7 @@ interface Summen {
 
 const s: Summen = {
   teamSpiele: 0, poss: 0, pts: 0, fgm: 0, fga: 0, tpm: 0, tpa: 0, ftm: 0, fta: 0, reb: 0, oreb: 0,
-  ast: 0, stl: 0, blk: 0, to: 0, pf: 0, ot: 0, spiele: 0, heimSiege: 0,
+  ast: 0, stl: 0, blk: 0, to: 0, pf: 0, ot: 0, otSpiele: 0, spiele: 0, heimSiege: 0,
   starterMin: [], rangMin: new Array(15).fill(0), rangN: new Array(15).fill(0),
 };
 const beste: number[] = [];
@@ -50,6 +52,10 @@ const topScorer: number[] = [];
 const punktDiffSd: number[] = [];
 const rangKorrelation: number[] = [];
 const rekorde: { rang: number; quote: number }[] = [];
+const verletzungsDauern: number[] = [];
+const moralWerte: number[] = [];
+let verletzungenGesamt = 0;
+let schwereVerletzungen = 0;
 const startZeit = Date.now();
 const abstaende: number[] = [];
 const teamPunkte: number[] = [];
@@ -60,7 +66,9 @@ for (let i = 0; i < saisons; i++) {
   const liga = generiereLiga(seed, laenge);
   const spiel = neuesSpiel('Balance', 40, seed, liga, 0);
   spiel.einstellungen.pbp = false;
-  simuliereBis(spiel, liga.spielplan.length);
+  // Das eigene Team (Team 0) kann die Simulation bei schweren Verletzungen anhalten: einfach weitermachen.
+  while (spiel.liga.tag < liga.spielplan.length) simuliereBis(spiel, liga.spielplan.length);
+  for (const sp of liga.spieler) moralWerte.push(sp.moral);
 
   for (const tag of liga.ergebnisse) {
     for (const erg of tag) {
@@ -68,6 +76,12 @@ for (let i = 0; i < saisons; i++) {
       abstaende.push(Math.abs(erg.heim.punkte - erg.gast.punkte));
       teamPunkte.push(erg.heim.punkte, erg.gast.punkte);
       s.ot += erg.ot;
+      if (erg.ot > 0) s.otSpiele++;
+      for (const v of erg.verletzungen ?? []) {
+        verletzungenGesamt++;
+        verletzungsDauern.push(v.spiele);
+        if (v.spiele >= schwerAb(laenge)) schwereVerletzungen++;
+      }
       if (erg.heim.punkte > erg.gast.punkte) s.heimSiege++;
       for (const box of [erg.heim, erg.gast]) {
         s.teamSpiele++;
@@ -131,6 +145,9 @@ zeile('Heimsiegquote', s.heimSiege / s.spiele, z.heimsiegQuote, 3);
 zeile('Beste Bilanz (Siege von 82)', mittel(beste), z.besteBilanz, 1);
 zeile('Schlechteste Bilanz (Siege von 82)', mittel(schlechteste), z.schlechtesteBilanz, 1);
 zeile('Bester Punkteschnitt eines Spielers', mittel(topScorer), z.topScorer);
+zeile('Spiele mit Verlängerung (Anteil)', s.otSpiele / s.spiele, z.verlaengerungsQuote, 3);
+zeile('Verletzungen pro Team und Saison', verletzungenGesamt / (saisons * 30), z.verletzungenProTeamUndSaison);
+zeile('Schwere Verletzungen pro Team/Saison', schwereVerletzungen / (saisons * 30), z.schwereVerletzungenProTeamUndSaison, 2);
 console.log(`\n  Streuung der Punktedifferenz zwischen Teams: ${mittel(punktDiffSd).toFixed(2)} (Ziel ca. 5–7; NBA ca. 5–6)`);
 {
   const sd = Math.sqrt(abstaende.reduce((a, x) => a + x * x, 0) / abstaende.length);
@@ -141,7 +158,14 @@ console.log(`\n  Streuung der Punktedifferenz zwischen Teams: ${mittel(punktDiff
   console.log(`  Punkte eines Teams pro Spiel: Standardabweichung ${psd.toFixed(1)} (NBA ca. 12), Minimum ${Math.min(...teamPunkte)}, Maximum ${Math.max(...teamPunkte)}`);
 }
 console.log(`  Bester Punkteschnitt je Saison: ${topScorer.map((x) => x.toFixed(1)).join(', ')}`);
-console.log(`  Spiele mit Verlängerung: ${((s.ot / s.spiele) * 100).toFixed(1)} % (NBA ca. 6 %; Endspiel-Taktik wie Foulen fehlt noch)`);
+{
+  const sortiert = [...verletzungsDauern].sort((a, b) => a - b);
+  const med = sortiert[Math.floor(sortiert.length / 2)] ?? 0;
+  const lang = sortiert.filter((x) => x >= 11).length;
+  console.log(`  Verletzungen: Median ${med} Spiele, ${lang} von ${sortiert.length} dauern 11+ Spiele; längste ${sortiert[sortiert.length - 1] ?? 0}`);
+  const unter35 = moralWerte.filter((m) => m < CONFIG.moral.unzufriedenUnter).length;
+  console.log(`  Moral am Saisonende: Mittel ${mittel(moralWerte).toFixed(1)}, Min ${Math.min(...moralWerte).toFixed(0)}, Max ${Math.max(...moralWerte).toFixed(0)}, unzufrieden (<${CONFIG.moral.unzufriedenUnter}): ${((unter35 / moralWerte.length) * 100).toFixed(1)} %`);
+}
 console.log(`  Steals ${pro(s.stl).toFixed(1)}, Blocks ${pro(s.blk).toFixed(1)} pro Team (NBA ca. 7–8 / 5)`);
 
 console.log('\n  Durchschnittliche Minuten nach Kaderrang (nach OVR):');

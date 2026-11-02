@@ -5,9 +5,71 @@
  * Meilenstein 1: nur ein Grundgerüst, die Werte werden in den
  * folgenden Meilensteinen verwendet und feinjustiert.
  */
+/**
+ * Wirkung einer Taktik-Einstellung. Alle Felder sind Anpassungen gegenüber dem Normalfall
+ * (Faktoren: 1 = keine Änderung, Zuschläge: 0 = keine Änderung). "Eigene" Werte gelten, wenn
+ * das Team angreift bzw. selbst betroffen ist; "Gegner" gelten für den angreifenden Gegner.
+ */
+export interface Effekt {
+  /** Faktor auf die Dauer der eigenen Ballbesitze */
+  dauer: number;
+  /** Faktor auf den Energieverbrauch der eigenen Spieler */
+  muedigkeit: number;
+  /** Faktor auf die Chance auf Fastbreaks des eigenen Teams */
+  fast: number;
+  /** Faktoren auf die Wurfzonen [Ring, Mitteldistanz, Dreier] der eigenen Angriffe */
+  zonen: readonly [number, number, number];
+  /** Faktoren auf die Häufigkeit der Spielzüge der eigenen Angriffe */
+  zuege: { iso: number; pnr: number; post: number; spot: number; drive: number };
+  /** Zuschlag auf die eigene Trefferchance je Zone [Ring, Mitte, Dreier] */
+  trefferEigen: readonly [number, number, number];
+  /** Zuschlag auf die Trefferchance des angreifenden Gegners je Zone (Wirkung der Verteidigung) */
+  trefferGegner: readonly [number, number, number];
+  /** Zuschlag auf die eigene Turnover-Wahrscheinlichkeit */
+  turnoverEigen: number;
+  /** Zuschlag auf die Turnover-Wahrscheinlichkeit des Gegners (wird mit der Eignung der Verteidiger skaliert) */
+  turnoverGegner: number;
+  /** Zuschlag auf den Anteil der Ballverluste, die als Steal gewertet werden (eigene Verteidigung) */
+  stealAnteil: number;
+  /** Faktor auf Fouls der eigenen Verteidigung (ohne Wurf bzw. beim Wurf) */
+  foulOhneWurf: number;
+  foulBeimWurf: number;
+  /** Faktor auf die Offensiv-Rebound-Chance des eigenen Teams */
+  oreb: number;
+  /** Faktor auf die Assist-Wahrscheinlichkeit des eigenen Teams */
+  assist: number;
+  /** Zusätzlicher Exponent auf die Wurf-Häufigkeit nach Offensivstärke (positiv: Stars werfen mehr) */
+  nutzungExtra: number;
+  /** Faktor auf die Wurf-Häufigkeit großer Spieler (PF/C) */
+  nutzungBigs: number;
+  /** Zuschlag auf die Trefferchance des besten Offensivspielers auf dem Feld (Gegner doppelt ihn) */
+  trefferStar: number;
+}
+
+const NEUTRAL: Effekt = {
+  dauer: 1,
+  muedigkeit: 1,
+  fast: 1,
+  zonen: [1, 1, 1],
+  zuege: { iso: 1, pnr: 1, post: 1, spot: 1, drive: 1 },
+  trefferEigen: [0, 0, 0],
+  trefferGegner: [0, 0, 0],
+  turnoverEigen: 0,
+  turnoverGegner: 0,
+  stealAnteil: 0,
+  foulOhneWurf: 1,
+  foulBeimWurf: 1,
+  oreb: 1,
+  assist: 1,
+  nutzungExtra: 0,
+  nutzungBigs: 1,
+  trefferStar: 0,
+};
+const E = (teil: Partial<Effekt>): Effekt => ({ ...NEUTRAL, ...teil });
+
 export const CONFIG = {
   /** Version des Spielstand-Formats. Bei jeder Änderung erhöhen + Migration schreiben. */
-  saveVersion: 3,
+  saveVersion: 4,
 
   /** Anzahl Speicherplätze */
   saveSlots: 3,
@@ -159,25 +221,110 @@ export const CONFIG = {
       erholungViertel: 6,
       erholungHalbzeit: 18,
       /** So viele Attributpunkte kostet jeder fehlende Energiepunkt */
-      attributProPunkt: 0.25,
+      attributProPunkt: 0.13,
       /** So viele Rotations-Wertungspunkte kostet jeder fehlende Energiepunkt */
-      wertungProPunkt: 0.5,
+      wertungProPunkt: 0.65,
     },
     rotation: {
-      /** Rotationswert = 100 minus Rang im Kader mal diesen Wert, minus Müdigkeit */
-      rangSchritt: 3.2,
       /** Mindestzeit auf dem Feld, bevor ein Wechsel erlaubt ist (Sekunden) */
       minEinsatz: 120,
       /** Wer schon auf dem Feld steht, bekommt diesen Bonus (verhindert Hin und Her) */
       traegheit: 2.5,
-      /** Abzug für die Rangplätze 9–10 und ab 11 im Kader (nach OVR) */
-      abzugRang9: 3,
-      abzugRang11: 10,
       foulProblem5: 6,
       /** Garbage Time: Abstand und Restzeit im letzten Viertel, Abzug für die Starter */
       garbageAbstand: 22,
       garbageSekunden: 420,
       garbageStarterAbzug: 25,
+      /** Wertung pro Minute, die ein Spieler hinter seiner Ziel-Spielzeit liegt */
+      defizitProMinute: 6,
+      /** Standard-Minuten (automatische Rotation) nach Rang der einsatzbereiten Spieler; wird auf 240 normiert */
+      standardMinuten: [39, 36, 33, 30, 28, 23, 18, 13, 9, 6, 3] as readonly number[],
+      /** Beim Start der zweiten Halbzeit bevorzugte Starter (Bonus auf die Wertung) */
+      starterNachHalbzeit: 40,
+      /** Spieler ohne Ziel-Minuten, die nur im Notfall spielen (zu wenige Spieler mit Minuten) */
+      notfallMinuten: 8,
+      /** So viele Spieler bekommen mindestens Minuten, sonst werden Spieler nach OVR ergänzt */
+      mindestRotation: 8,
+    },
+    /** Schlussminute: Foulen des zurückliegenden Teams, Zeit von der Uhr nehmen, schnelle Würfe */
+    endspiel: {
+      /** Ab dieser Restzeit (Sekunden) im letzten Viertel/Overtime greifen die Regeln */
+      foulenAb: 40,
+      /** Rückstand, bis zu dem absichtlich gefoult wird: Grundwert plus Restsekunden / Teiler */
+      foulenRueckstand: 2,
+      foulenTeiler: 12,
+      /** Dauer eines Ballbesitzes beim Foulen (Sekunden) */
+      foulDauer: [2, 4] as const,
+      /** Das führende Team lässt die Uhr herunterlaufen, wenn weniger als so viele Sekunden bleiben */
+      haltenAb: 100,
+      haltenVorsprungMax: 12,
+      haltenDauer: [19, 3] as const,
+      /** Das zurückliegende Team wirft schneller: Dauerfaktor und Dreier-Anteil, wenn es mit mindestens 3 zurückliegt */
+      eilenAb: 70,
+      eilenDauer: 0.62,
+      eilenDreier: 1.7,
+      /** Bei genau 3 Punkten Rückstand wirft das Team in den letzten Sekunden einen Dreier zum Ausgleich */
+      ausgleichswurfSekunden: 14,
+      /** Enge Schlussphase: Restzeit, maximaler Abstand und Faktor auf den Ausgleichs-Effekt */
+      clutch: { sekunden: 300, abstand: 10, faktor: 3 },
+    },
+    /** Wirkung der Taktik-Einstellungen. Die mittlere Option jeder Gruppe ist der neutrale Normalfall. */
+    taktik: {
+      tempo: {
+        langsam: E({ dauer: 1.12, muedigkeit: 0.97, fast: 0.55, turnoverEigen: -0.003 }),
+        normal: E({}),
+        schnell: E({ dauer: 0.9, muedigkeit: 1.04, fast: 1.5, turnoverEigen: 0.005 }),
+      },
+      wurf: {
+        dreier: E({
+          zonen: [0.94, 0.78, 1.3],
+          zuege: { iso: 1, pnr: 1, post: 0.8, spot: 1.25, drive: 0.95 },
+          trefferEigen: [-0.006, 0, 0.004],
+          oreb: 0.95,
+        }),
+        ausgewogen: E({}),
+        zone: E({
+          zonen: [1.25, 1.05, 0.72],
+          zuege: { iso: 1, pnr: 1, post: 1.4, spot: 0.8, drive: 1.15 },
+          trefferEigen: [0.002, 0, -0.004],
+          oreb: 1.03,
+        }),
+      },
+      fokus: {
+        star: E({ nutzungExtra: 1.6, trefferStar: -0.012, assist: 0.95 }),
+        ballbewegung: E({}),
+        innen: E({
+          nutzungBigs: 1.5,
+          zonen: [1.12, 1, 0.88],
+          zuege: { iso: 0.9, pnr: 1, post: 1.5, spot: 0.9, drive: 1 },
+          trefferEigen: [0.002, 0, -0.003],
+          assist: 0.97,
+        }),
+      },
+      verteidigung: {
+        mann: E({}),
+        zone: E({
+          trefferGegner: [-0.016, 0, 0.012],
+          turnoverGegner: -0.01,
+          foulOhneWurf: 0.85,
+          foulBeimWurf: 0.85,
+          muedigkeit: 0.96,
+        }),
+        pressing: E({
+          turnoverGegner: 0.026,
+          stealAnteil: 0.08,
+          trefferGegner: [0.014, 0, 0.008],
+          foulOhneWurf: 1.2,
+          muedigkeit: 1.12,
+        }),
+      },
+      intensitaet: {
+        niedrig: E({ trefferGegner: [0.006, 0.006, 0.006], turnoverGegner: -0.01, foulOhneWurf: 0.85, foulBeimWurf: 0.88, muedigkeit: 0.94 }),
+        normal: E({}),
+        hoch: E({ trefferGegner: [-0.004, -0.004, -0.004], turnoverGegner: 0.012, foulOhneWurf: 1.18, foulBeimWurf: 1.12, muedigkeit: 1.07 }),
+      },
+      /** Eignung: Wirkung von Zone/Pressing hängt von den Verteidigern ab (Attributmittel -> Faktor) */
+      eignung: { referenz: 55, spanne: 15, min: 0.3, max: 1.8 },
     },
   },
 
@@ -200,6 +347,11 @@ export const CONFIG = {
     schlechtesteBilanz: { min: 13, max: 26 },
     /** Beste Punkteschnitte pro Spiel */
     topScorer: { min: 24, max: 35 },
+    /** Anteil der Spiele mit Verlängerung (NBA ca. 6 %; hier etwas weniger, siehe NOTIZEN.md) */
+    verlaengerungsQuote: { min: 0.04, max: 0.075 },
+    /** Verletzungen je Team und Saison (alle / nur schwere ab 10 Spielen Ausfall) */
+    verletzungenProTeamUndSaison: { min: 3, max: 8 },
+    schwereVerletzungenProTeamUndSaison: { min: 0.4, max: 1.6 },
   },
 
   finanzen: {
@@ -220,8 +372,42 @@ export const CONFIG = {
   },
 
   verletzungen: {
-    /** Wahrscheinlichkeit pro Ballbesitz und Spieler auf dem Feld (grobe Startgröße) */
-    rateProBallbesitz: 0.00012,
+    /** Wahrscheinlichkeit pro Sekunde Spielzeit und Spieler auf dem Feld (bei Verletzungsanfälligkeit 60) */
+    rateProSekunde: 0.0000059,
+    /** Anfälligkeit 60 = Faktor 1, linear skaliert (Mindestfaktor) */
+    anfaelligkeitReferenz: 60,
+    anfaelligkeitMin: 0.4,
+    /** Ausfalldauer in Spielen (bei 82 Spielen): Anteil an allen Verletzungen und Bereich je Stufe */
+    stufen: [
+      { anteil: 0.58, von: 1, bis: 3 },
+      { anteil: 0.27, von: 4, bis: 10 },
+      { anteil: 0.11, von: 11, bis: 30 },
+      { anteil: 0.04, von: 31, bis: 110 },
+    ] as const,
+    /** Ab so vielen Spielen Ausfall (hochgerechnet auf 82 Spiele) hält die Simulation an */
+    schwerAb: 10,
+  },
+
+  moral: {
+    /** Startwert aller Spieler */
+    start: 70,
+    /** Alle Spiele zieht die Moral um diesen Anteil der Abweichung zur Mitte zurück */
+    zumMittelwert: 0.015,
+    mitte: 70,
+    sieg: 0.6,
+    niederlage: -0.6,
+    /** Rolle: Abweichung der Spielzeit von der erwarteten (in Minuten / 10), begrenzt, mal dieser Wert */
+    rollenSchritt: 0.9,
+    rollenGrenze: { min: -1.2, max: 0.8 },
+    /** Erwartete Spielzeit (Minuten) nach Rang im Kader (nach OVR) */
+    erwarteteMinuten: [33, 30, 28, 26, 24, 23, 21, 19, 15, 12] as readonly number[],
+    /** Unter diesem Wert gilt ein Spieler als unzufrieden (Meldung, hält die Simulation an) */
+    unzufriedenUnter: 35,
+    /** Wirkung auf die Leistung: Abzug pro Punkt unter 50, Bonus pro Punkt über 80 (in Attributpunkten) */
+    malusProPunkt: 0.08,
+    bonusProPunkt: 0.04,
+    bonusAb: 80,
+    malusUnter: 50,
   },
 } as const;
 

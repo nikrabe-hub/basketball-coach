@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { CONFIG } from '../engine/config';
 import { gehaltSumme, staerkeRang, teamStaerke } from '../engine/league';
+import { verletzungText } from '../engine/injuries';
 import { formatDatum, spieleVonTeam } from '../engine/schedule';
 import {
   deadlineTag,
@@ -12,12 +13,15 @@ import {
   ZIEL_TEXT,
   type SimulationsZiel,
 } from '../engine/season';
+import { letzteWichtigeNachricht } from '../engine/zustand';
 import { serieText, siegQuote, sortiereTabelle, spiele } from '../engine/stats';
 import { CONFERENCES, DIVISIONEN, teamName } from '../engine/teams';
-import type { Liga, SpielDaten, SpielErgebnis, Team } from '../engine/types';
+import type { Liga, Nachricht, SpielDaten, SpielErgebnis, Team } from '../engine/types';
 import { ErgebnisseView } from './ErgebnisseView';
 import { fmtGeld } from './format';
 import { KaderTabelle } from './KaderTabelle';
+import { RotationView } from './RotationView';
+import { TaktikView } from './TaktikView';
 import type { TabId } from './nav';
 import { AbbruchFehler, simuliereImHintergrund, type Lauf } from './simulation';
 import { SimOverlay } from './SimOverlay';
@@ -49,6 +53,8 @@ export function GameScreen({ slot, spiel, tab, onTab, onAendern, onZuDenSlots, o
   const eigenesTeam = spiel.liga.teams[spiel.userTeamId] as Team;
   const [sim, setSim] = useState<{ titel: string; fertig: number; gesamt: number } | null>(null);
   const [simFehler, setSimFehler] = useState<string | null>(null);
+  const [stopp, setStopp] = useState<Nachricht | null>(null);
+  const [teamAnsicht, setTeamAnsicht] = useState<TeamAnsicht>('kader');
   const lauf = useRef<Lauf | null>(null);
 
   // Verlässt man das Spiel mitten in der Simulation, wird sie abgebrochen (Spielstand bleibt unverändert).
@@ -58,11 +64,14 @@ export function GameScreen({ slot, spiel, tab, onTab, onAendern, onZuDenSlots, o
     const bis = zielTag(spiel, ziel);
     if (bis === null || lauf.current) return;
     setSimFehler(null);
+    setStopp(null);
     setSim({ titel: ZIEL_TEXT[ziel], fertig: 0, gesamt: bis - spiel.liga.tag });
     const l = simuliereImHintergrund(spiel, bis, (fertig, gesamt) => setSim((s) => (s ? { ...s, fertig, gesamt } : s)));
     lauf.current = l;
     try {
       const neu = await l.ergebnis;
+      // Die Simulation hält bei wichtigen Meldungen (z. B. schwere Verletzung) vor dem Ziel an.
+      if (neu.liga.tag < bis) setStopp(letzteWichtigeNachricht(neu) ?? null);
       await onAendern(neu);
     } catch (e) {
       if (!(e instanceof AbbruchFehler)) setSimFehler(`Simulation oder Speichern fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}`);
@@ -97,9 +106,22 @@ export function GameScreen({ slot, spiel, tab, onTab, onAendern, onZuDenSlots, o
             laeuft={sim !== null}
             fehler={simFehler}
             onBox={onBox}
+            onSpieler={onSpieler}
+            onAendern={onAendern}
+            stopp={stopp}
+            onStoppSchliessen={() => setStopp(null)}
           />
         )}
-        {tab === 'team' && <TeamTab spiel={spiel} eigenesTeam={eigenesTeam} onSpieler={onSpieler} />}
+        {tab === 'team' && (
+          <TeamTab
+            spiel={spiel}
+            eigenesTeam={eigenesTeam}
+            onSpieler={onSpieler}
+            onAendern={onAendern}
+            ansicht={teamAnsicht}
+            onAnsicht={setTeamAnsicht}
+          />
+        )}
         {tab === 'liga' && <LigaTab spiel={spiel} onTeam={onTeam} onSpieler={onSpieler} onBox={onBox} />}
         {tab === 'buero' && (
           <Platzhalter
@@ -185,6 +207,10 @@ function StartTab({
   laeuft,
   fehler,
   onBox,
+  onSpieler,
+  onAendern,
+  stopp,
+  onStoppSchliessen,
 }: {
   spiel: SpielDaten;
   eigenesTeam: Team;
@@ -193,6 +219,10 @@ function StartTab({
   laeuft: boolean;
   fehler: string | null;
   onBox: (tag: number, index: number) => void;
+  onSpieler: (id: number) => void;
+  onAendern: (neu: SpielDaten) => Promise<void>;
+  stopp: Nachricht | null;
+  onStoppSchliessen: () => void;
 }) {
   const { liga } = spiel;
   const alleSpiele = spieleVonTeam(liga.spielplan, eigenesTeam.id);
@@ -210,6 +240,23 @@ function StartTab({
   return (
     <>
       <h1>Start</h1>
+      {stopp && (
+        <section className="karte stopp">
+          <h2>⏸ Simulation angehalten</h2>
+          <p>{stopp.text}</p>
+          <p className="hinweis">
+            Schau dir den Kader und die Rotation an. Danach kannst du die Simulation einfach fortsetzen.
+          </p>
+          <div className="knopfreihe">
+            <button className="knopf" onClick={() => { onStoppSchliessen(); onTab('team'); }}>
+              Zum Team
+            </button>
+            <button className="knopf zweit" onClick={onStoppSchliessen}>
+              Schließen
+            </button>
+          </div>
+        </section>
+      )}
       <section className="karte">
         <div className="teamkopf">
           <TeamLogo kuerzel={eigenesTeam.kuerzel} farbe1={eigenesTeam.farbe1} farbe2={eigenesTeam.farbe2} groesse={52} />
@@ -302,10 +349,7 @@ function StartTab({
         </section>
       )}
 
-      <section className="karte">
-        <h2>Posteingang</h2>
-        <p className="hinweis">Keine Nachrichten.</p>
-      </section>
+      <Posteingang spiel={spiel} onSpieler={onSpieler} onAendern={onAendern} />
       <section className="karte">
         <h2>Ziele &amp; Jobsicherheit</h2>
         <p className="hinweis">Die Besitzer-Ziele kommen in Meilenstein 6.</p>
@@ -316,47 +360,162 @@ function StartTab({
 
 // ---------- Team ----------
 
+type TeamAnsicht = 'kader' | 'rotation' | 'taktik';
+const TEAM_ANSICHTEN: { id: TeamAnsicht; label: string }[] = [
+  { id: 'kader', label: 'Kader' },
+  { id: 'rotation', label: 'Rotation' },
+  { id: 'taktik', label: 'Taktik' },
+];
+
 function TeamTab({
   spiel,
   eigenesTeam,
   onSpieler,
+  onAendern,
+  ansicht,
+  onAnsicht,
 }: {
   spiel: SpielDaten;
   eigenesTeam: Team;
   onSpieler: (id: number) => void;
+  onAendern: (neu: SpielDaten) => Promise<void>;
+  ansicht: TeamAnsicht;
+  onAnsicht: (a: TeamAnsicht) => void;
 }) {
   const { liga } = spiel;
   const gehalt = gehaltSumme(liga, eigenesTeam.id);
   const { salaryCap, luxussteuerGrenze } = CONFIG.finanzen;
   const status =
     gehalt > luxussteuerGrenze ? 'über der Luxussteuer-Grenze' : gehalt > salaryCap ? 'über der Gehaltsobergrenze' : 'unter der Gehaltsobergrenze';
+  const verletzte = eigenesTeam.kader.map((id) => liga.spieler[id]!).filter((s) => s.verletzung);
 
   return (
     <>
       <h1>Team</h1>
-      <section className="karte">
-        <h2>Gehaltsstatus</h2>
-        <div className="fakten">
-          <span>Gehälter</span>
-          <span>{fmtGeld(gehalt)}</span>
-          <span>Cap</span>
-          <span>{fmtGeld(salaryCap)}</span>
-          <span>Luxussteuer ab</span>
-          <span>{fmtGeld(luxussteuerGrenze)}</span>
-          <span>Status</span>
-          <span>{status}</span>
-          <span>Kader</span>
-          <span>
-            {eigenesTeam.kader.length} von {CONFIG.liga.kaderMax} Spielern
-          </span>
-          <span>Stärke</span>
-          <span>{teamStaerke(liga, eigenesTeam.id).toFixed(1).replace('.', ',')}</span>
-        </div>
-      </section>
-      <h2 className="zwischentitel">Kader</h2>
-      <p className="hinweis">Spalten antippen zum Sortieren, Spieler antippen für die Spielerkarte. Rotation, Taktik und Verträge folgen in Meilenstein 4.</p>
-      <KaderTabelle liga={liga} teamId={eigenesTeam.id} onSpieler={onSpieler} />
+      <div className="auswahl" role="tablist" aria-label="Ansicht">
+        {TEAM_ANSICHTEN.map((a) => (
+          <button
+            key={a.id}
+            role="tab"
+            aria-selected={ansicht === a.id}
+            className={ansicht === a.id ? 'wahl aktiv' : 'wahl'}
+            onClick={() => onAnsicht(a.id)}
+          >
+            {a.label}
+          </button>
+        ))}
+      </div>
+
+      {ansicht === 'kader' && (
+        <>
+          <section className="karte">
+            <h2>Gehaltsstatus</h2>
+            <div className="fakten">
+              <span>Gehälter</span>
+              <span>{fmtGeld(gehalt)}</span>
+              <span>Cap</span>
+              <span>{fmtGeld(salaryCap)}</span>
+              <span>Luxussteuer ab</span>
+              <span>{fmtGeld(luxussteuerGrenze)}</span>
+              <span>Status</span>
+              <span>{status}</span>
+              <span>Kader</span>
+              <span>
+                {eigenesTeam.kader.length} von {CONFIG.liga.kaderMax} Spielern
+              </span>
+              <span>Stärke</span>
+              <span>{teamStaerke(liga, eigenesTeam.id).toFixed(1).replace('.', ',')}</span>
+            </div>
+          </section>
+          {verletzte.length > 0 && (
+            <section className="karte">
+              <h2>Verletzte</h2>
+              {verletzte.map((s) => (
+                <button key={s.id} className="verletzt-zeile" onClick={() => onSpieler(s.id)}>
+                  <strong>
+                    {s.vorname} {s.nachname}
+                  </strong>
+                  <span className="w-schwach">🩹 {verletzungText(s)}</span>
+                </button>
+              ))}
+            </section>
+          )}
+          <h2 className="zwischentitel">Kader</h2>
+          <p className="hinweis">
+            Spalten antippen zum Sortieren, Spieler antippen für die Spielerkarte. Verträge folgen in einem späteren Meilenstein.
+          </p>
+          <KaderTabelle liga={liga} teamId={eigenesTeam.id} onSpieler={onSpieler} />
+        </>
+      )}
+      {ansicht === 'rotation' && <RotationView spiel={spiel} onAendern={onAendern} onSpieler={onSpieler} />}
+      {ansicht === 'taktik' && <TaktikView spiel={spiel} onAendern={onAendern} />}
     </>
+  );
+}
+
+// ---------- Posteingang ----------
+
+const NACHRICHT_ICON: Record<Nachricht['typ'], string> = { verletzung: '🩹', rueckkehr: '✅', moral: '😠', info: 'ℹ️' };
+
+function Posteingang({
+  spiel,
+  onSpieler,
+  onAendern,
+}: {
+  spiel: SpielDaten;
+  onSpieler: (id: number) => void;
+  onAendern: (neu: SpielDaten) => Promise<void>;
+}) {
+  const nachrichten = [...spiel.posteingang].reverse();
+  const ungelesen = nachrichten.filter((n) => !n.gelesen).length;
+  const alleGelesen = () =>
+    void onAendern({ ...spiel, posteingang: spiel.posteingang.map((n) => (n.gelesen ? n : { ...n, gelesen: true })) });
+  const [alle, setAlle] = useState(false);
+  const sichtbar = alle ? nachrichten : nachrichten.slice(0, 8);
+
+  return (
+    <section className="karte">
+      <h2>
+        Posteingang
+        {ungelesen > 0 && <span className="abzeichen">{ungelesen}</span>}
+      </h2>
+      {nachrichten.length === 0 ? (
+        <p className="hinweis">Keine Nachrichten. Verletzungen und unzufriedene Spieler melden sich hier.</p>
+      ) : (
+        <>
+          <div className="nachrichten">
+            {sichtbar.map((n) => (
+              <button
+                key={n.id}
+                className={`nachricht${n.gelesen ? '' : ' neu'}${n.wichtig ? ' wichtig' : ''}`}
+                disabled={n.spielerId === undefined}
+                onClick={() => n.spielerId !== undefined && onSpieler(n.spielerId)}
+              >
+                <span className="nachricht-icon" aria-hidden="true">
+                  {NACHRICHT_ICON[n.typ]}
+                </span>
+                <span className="nachricht-text">
+                  {n.text}
+                  <small>{formatDatum(spiel.saison, n.tag)}</small>
+                </span>
+              </button>
+            ))}
+          </div>
+          <div className="knopfreihe">
+            {ungelesen > 0 && (
+              <button className="knopf zweit klein" onClick={alleGelesen}>
+                Alle als gelesen markieren
+              </button>
+            )}
+            {nachrichten.length > 8 && (
+              <button className="knopf zweit klein" onClick={() => setAlle(!alle)}>
+                {alle ? 'Weniger anzeigen' : `Alle ${nachrichten.length} anzeigen`}
+              </button>
+            )}
+          </div>
+        </>
+      )}
+    </section>
   );
 }
 

@@ -2,7 +2,8 @@ import { ATTRIBUT_GRUPPEN, ATTRIBUT_INFO, PERSOENLICHKEIT_INFO } from '../engine
 import { proSpiel, quote } from '../engine/stats';
 import { teamName } from '../engine/teams';
 import type { Liga, Spieler, Team } from '../engine/types';
-import { fmt1, fmtGeld, fmtProz, wertKlasse, wertWort } from './format';
+import { verletzungText } from '../engine/injuries';
+import { fmt1, fmtGeld, fmtProz, moralKlasse, moralWort, wertKlasse, wertWort } from './format';
 import { TeamLogo } from './TeamLogo';
 
 interface Props {
@@ -42,6 +43,20 @@ export function PlayerCard({ spieler: s, liga }: Props) {
           <span>{teamName(team)}</span>
         </div>
       )}
+
+      <div className="sk-block">
+        <h3>Zustand</h3>
+        <div className="fakten">
+          <span>Moral</span>
+          <span className={moralKlasse(s.moral)}>
+            {moralWort(s.moral)} ({Math.round(s.moral)})
+          </span>
+          <span>Gesundheit</span>
+          <span className={s.verletzung ? 'w-schwach' : 'w-gut'}>
+            {s.verletzung ? `🩹 ${verletzungText(s)}` : 'fit'}
+          </span>
+        </div>
+      </div>
 
       <div className="sk-block">
         <h3>Vertrag</h3>

@@ -1,4 +1,4 @@
-import { simuliereBis } from '../engine/season';
+import { hatNeueWichtigeNachricht, hoechsteNachrichtenId, simuliereBis } from '../engine/season';
 import type { SpielDaten } from '../engine/types';
 import type { WorkerAntwort, WorkerAuftrag } from '../worker/sim.worker';
 
@@ -68,8 +68,11 @@ function simuliereOhneWorker(
     const ende = Math.min(bis, spiel.liga.spielplan.length);
     while (spiel.liga.tag < ende) {
       if (abgebrochen) throw new AbbruchFehler();
+      const letzteId = hoechsteNachrichtenId(spiel);
       simuliereBis(spiel, spiel.liga.tag + 1);
       onFortschritt(spiel.liga.tag - start, ende - start);
+      // Wie im Worker: bei wichtigen Meldungen (z. B. schwere Verletzung) anhalten
+      if (spiel.liga.tag < ende && hatNeueWichtigeNachricht(spiel, letzteId)) break;
       await new Promise((r) => setTimeout(r, 0));
     }
     return spiel;

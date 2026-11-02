@@ -76,6 +76,25 @@ export function BoxscoreView({ liga, erg, saison, onSpieler }: Props) {
 
       <p className="spieltext">{erg.text}</p>
 
+      {erg.verletzungen && erg.verletzungen.length > 0 && (
+        <div className="karte">
+          <h3>🩹 Verletzungen in diesem Spiel</h3>
+          {erg.verletzungen.map((v) => {
+            const sp = liga.spieler[v.spielerId];
+            const team = liga.teams[v.teamId];
+            if (!sp) return null;
+            return (
+              <p key={v.spielerId}>
+                <button className="textknopf" onClick={() => onSpieler(v.spielerId)}>
+                  {kurzName(sp)}
+                </button>{' '}
+                ({team?.kuerzel}): {v.typ}, Ausfall {v.spiele} {v.spiele === 1 ? 'Spiel' : 'Spiele'}
+              </p>
+            );
+          })}
+        </div>
+      )}
+
       {erg.pbp && (
         <div className="auswahl" role="tablist" aria-label="Ansicht">
           <button
