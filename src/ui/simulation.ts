@@ -1,4 +1,4 @@
-import { hatNeueWichtigeNachricht, hoechsteNachrichtenId, simuliereBis } from '../engine/season';
+import { simuliereZiel, type SimulationsZiel } from '../engine/season';
 import type { SpielDaten } from '../engine/types';
 import type { WorkerAntwort, WorkerAuftrag } from '../worker/sim.worker';
 
@@ -16,15 +16,16 @@ export class AbbruchFehler extends Error {
 }
 
 /**
- * Simuliert bis zum Tag `bis` in einem Web Worker (die Oberfläche bleibt bedienbar).
- * Wo es keine Worker gibt (z. B. in Tests), läuft dasselbe in kleinen Schritten im Hauptthread.
+ * Simuliert das Ziel (Hauptrunde, Play-In oder Playoffs) in einem Web Worker (die Oberfläche bleibt bedienbar).
+ * Wo es keine Worker gibt (z. B. in Tests), läuft dasselbe direkt im Hauptthread.
+ * Bei einer wichtigen Meldung (z. B. schwere Verletzung) hält die Simulation früher an.
  */
 export function simuliereImHintergrund(
   spiel: SpielDaten,
-  bis: number,
+  ziel: SimulationsZiel,
   onFortschritt: (fertig: number, gesamt: number) => void,
 ): Lauf {
-  if (typeof Worker === 'undefined') return simuliereOhneWorker(spiel, bis, onFortschritt);
+  if (typeof Worker === 'undefined') return simuliereOhneWorker(spiel, ziel, onFortschritt);
 
   const worker = new Worker(new URL('../worker/sim.worker.ts', import.meta.url), { type: 'module' });
   let ablehnen: (e: Error) => void = () => {};
@@ -45,7 +46,7 @@ export function simuliereImHintergrund(
       worker.terminate();
       reject(new Error(e.message || 'Fehler im Simulations-Worker'));
     };
-    worker.postMessage({ spiel, bis } satisfies WorkerAuftrag);
+    worker.postMessage({ spiel, ziel } satisfies WorkerAuftrag);
   });
   return {
     ergebnis,
@@ -56,25 +57,13 @@ export function simuliereImHintergrund(
   };
 }
 
-function simuliereOhneWorker(
-  original: SpielDaten,
-  bis: number,
-  onFortschritt: (fertig: number, gesamt: number) => void,
-): Lauf {
+function simuliereOhneWorker(original: SpielDaten, ziel: SimulationsZiel, onFortschritt: (fertig: number, gesamt: number) => void): Lauf {
   let abgebrochen = false;
   const ergebnis = (async () => {
+    await new Promise((r) => setTimeout(r, 0));
+    if (abgebrochen) throw new AbbruchFehler();
     const spiel = structuredClone(original);
-    const start = spiel.liga.tag;
-    const ende = Math.min(bis, spiel.liga.spielplan.length);
-    while (spiel.liga.tag < ende) {
-      if (abgebrochen) throw new AbbruchFehler();
-      const letzteId = hoechsteNachrichtenId(spiel);
-      simuliereBis(spiel, spiel.liga.tag + 1);
-      onFortschritt(spiel.liga.tag - start, ende - start);
-      // Wie im Worker: bei wichtigen Meldungen (z. B. schwere Verletzung) anhalten
-      if (spiel.liga.tag < ende && hatNeueWichtigeNachricht(spiel, letzteId)) break;
-      await new Promise((r) => setTimeout(r, 0));
-    }
+    simuliereZiel(spiel, ziel, { onFortschritt });
     return spiel;
   })();
   return {

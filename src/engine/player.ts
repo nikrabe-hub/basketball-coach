@@ -203,5 +203,6 @@ export function erzeugeSpieler(rng: Rng, namen: NamenGenerator, vorgabe: Spieler
     teamId: vorgabe.teamId,
     moral: CONFIG.moral.start,
     verletzung: null,
+    neuling: alter <= gen.rookieAlterBis,
   };
 }

@@ -134,14 +134,19 @@ describe('Simulationsziele', () => {
     expect(zielTag(sp, 'deadline')).toBeNull();
     expect(zielTag(sp, 'woche')).not.toBeNull();
     simuliereBis(sp, 9999);
-    for (const z of ['naechstesSpiel', 'woche', 'deadline', 'saisonende'] as const) {
+    for (const z of ['naechstesSpiel', 'woche', 'deadline', 'saisonende', 'serie', 'playoffsEnde'] as const) {
       expect(zielTag(sp, z)).toBeNull();
     }
   });
 
-  it('simuliereTag auf einem nicht vorhandenen Tag wirft einen Fehler', () => {
+  it('simuliereTag nach der Hauptrunde spielt Play-In/Playoffs, nach den Finals wirft es einen Fehler', () => {
     const sp = neu(34);
     simuliereBis(sp, 9999);
+    expect(hauptrundeVorbei(sp.liga)).toBe(true);
+    expect(sp.liga.postseason?.phase).toBe('playin');
+    simuliereTag(sp);
+    expect(sp.liga.postseason?.tage).toHaveLength(1);
+    while (sp.liga.postseason?.phase !== 'beendet') simuliereTag(sp);
     expect(() => simuliereTag(sp)).toThrow();
   });
 });

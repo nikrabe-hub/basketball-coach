@@ -1,15 +1,15 @@
 /// <reference lib="webworker" />
-import { simuliereBis } from '../engine/season';
+import { simuliereZiel, type SimulationsZiel } from '../engine/season';
 import type { SpielDaten } from '../engine/types';
 
 /**
  * Web Worker: simuliert Spieltage im Hintergrund, damit die Oberfläche nicht einfriert.
- * Eingabe: ein Spielstand und der Tag, bis zu dem simuliert wird (ausschließlich).
+ * Eingabe: ein Spielstand und das Simulationsziel (Hauptrunde, Play-In oder Playoffs).
  * Ausgabe: laufende Fortschrittsmeldungen und am Ende der veränderte Spielstand.
  */
 export interface WorkerAuftrag {
   spiel: SpielDaten;
-  bis: number;
+  ziel: SimulationsZiel;
 }
 
 export type WorkerAntwort =
@@ -20,10 +20,10 @@ export type WorkerAntwort =
 const scope = self as unknown as DedicatedWorkerGlobalScope;
 
 scope.onmessage = (e: MessageEvent<WorkerAuftrag>) => {
-  const { spiel, bis } = e.data;
+  const { spiel, ziel } = e.data;
   try {
     let letzteMeldung = 0;
-    simuliereBis(spiel, bis, {
+    simuliereZiel(spiel, ziel, {
       onFortschritt: (fertig, gesamt) => {
         const jetzt = Date.now();
         // höchstens ca. 20 Meldungen pro Sekunde

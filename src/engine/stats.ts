@@ -156,18 +156,93 @@ export function punktDifferenz(b: TeamBilanz): number {
   return b.punkteFuer - b.punkteGegen;
 }
 
-/** Tabellenreihenfolge: Siegquote, dann Punktedifferenz, dann Team-ID. */
+// Cache für Direktvergleiche: gilt für genau diese Ergebnisliste und diesen Stand der Hauptrunde
+const direktvergleichCache = new WeakMap<object, { tage: number; siege: Map<number, number> }>();
+
+/** Siege von Team a gegen Team b in der Hauptrunde (Schlüssel: a * 1000 + b). */
+function direktvergleiche(liga: Liga): Map<number, number> {
+  const tage = Math.min(liga.tag, liga.spielplan.length);
+  const alt = direktvergleichCache.get(liga.ergebnisse);
+  if (alt && alt.tage === tage) return alt.siege;
+  const siege = new Map<number, number>();
+  for (let tag = 0; tag < tage; tag++) {
+    for (const erg of liga.ergebnisse[tag] ?? []) {
+      const heimGewinnt = erg.heim.punkte > erg.gast.punkte;
+      const gewinner = heimGewinnt ? erg.heim.teamId : erg.gast.teamId;
+      const verlierer = heimGewinnt ? erg.gast.teamId : erg.heim.teamId;
+      const k = gewinner * 1000 + verlierer;
+      siege.set(k, (siege.get(k) ?? 0) + 1);
+    }
+  }
+  direktvergleichCache.set(liga.ergebnisse, { tage, siege });
+  return siege;
+}
+
+const quoteVon = (siege: number, niederlagen: number) => (siege + niederlagen === 0 ? 0.5 : siege / (siege + niederlagen));
+
+/**
+ * Entscheidet Gleichstände bei gleicher Siegquote (vereinfachte NBA-Regeln):
+ * 1. Direktvergleich innerhalb der Gruppe, 2. Bilanz gegen Division-Gegner (nur wenn alle aus derselben Division),
+ * 3. Bilanz gegen Teams der eigenen Conference, 4. Punktedifferenz, 5. Team-ID (fester Ersatz für den Münzwurf).
+ */
+function loeseGleichstand(liga: Liga, gruppe: number[]): number[] {
+  if (gruppe.length < 2) return gruppe;
+  const stand = liga.stand.teams;
+  const m = direktvergleiche(liga);
+  const direkt = (id: number) => {
+    let w = 0;
+    let l = 0;
+    for (const o of gruppe) {
+      if (o === id) continue;
+      w += m.get(id * 1000 + o) ?? 0;
+      l += m.get(o * 1000 + id) ?? 0;
+    }
+    return quoteVon(w, l);
+  };
+  const dRate = new Map(gruppe.map((id) => [id, direkt(id)] as const));
+  const sortiert = [...gruppe].sort((a, b) => (dRate.get(b) as number) - (dRate.get(a) as number) || a - b);
+
+  // Teilgruppen mit gleichem Direktvergleich weiter entscheiden
+  const ergebnis: number[] = [];
+  for (let i = 0; i < sortiert.length; ) {
+    let j = i + 1;
+    while (j < sortiert.length && Math.abs((dRate.get(sortiert[j] as number) as number) - (dRate.get(sortiert[i] as number) as number)) < 1e-9) j++;
+    const teil = sortiert.slice(i, j);
+    if (teil.length > 1) {
+      const gleicheDivision = teil.every((id) => {
+        const t = liga.teams[id];
+        const t0 = liga.teams[teil[0] as number];
+        return t && t0 && t.conference === t0.conference && t.division === t0.division;
+      });
+      const divQ = (id: number) => quoteVon((stand[id] as TeamBilanz).divSiege, (stand[id] as TeamBilanz).divNiederlagen);
+      const confQ = (id: number) => quoteVon((stand[id] as TeamBilanz).confSiege, (stand[id] as TeamBilanz).confNiederlagen);
+      teil.sort(
+        (a, b) =>
+          (gleicheDivision ? divQ(b) - divQ(a) : 0) ||
+          confQ(b) - confQ(a) ||
+          punktDifferenz(stand[b] as TeamBilanz) - punktDifferenz(stand[a] as TeamBilanz) ||
+          a - b,
+      );
+    }
+    ergebnis.push(...teil);
+    i = j;
+  }
+  return ergebnis;
+}
+
+/** Tabellenreihenfolge: Siegquote, bei Gleichstand siehe `loeseGleichstand`. */
 export function sortiereTabelle(liga: Liga, teamIds: number[]): number[] {
   const stand = liga.stand.teams;
-  return [...teamIds].sort((a, b) => {
-    const ba = stand[a] as TeamBilanz;
-    const bb = stand[b] as TeamBilanz;
-    return (
-      siegQuote(bb) - siegQuote(ba) ||
-      punktDifferenz(bb) - punktDifferenz(ba) ||
-      a - b
-    );
-  });
+  const q = (id: number) => siegQuote(stand[id] as TeamBilanz);
+  const grob = [...teamIds].sort((a, b) => q(b) - q(a) || a - b);
+  const ergebnis: number[] = [];
+  for (let i = 0; i < grob.length; ) {
+    let j = i + 1;
+    while (j < grob.length && Math.abs(q(grob[j] as number) - q(grob[i] as number)) < 1e-9) j++;
+    ergebnis.push(...loeseGleichstand(liga, grob.slice(i, j)));
+    i = j;
+  }
+  return ergebnis;
 }
 
 /** Spiele Rückstand auf den Ersten der Gruppe. */

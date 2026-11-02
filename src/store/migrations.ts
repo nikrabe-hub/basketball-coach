@@ -1,5 +1,8 @@
 import { CONFIG } from '../engine/config';
+import { sichereSaisonZiele } from '../engine/karriere';
 import { generiereLiga } from '../engine/league';
+import { erzeugePostseason } from '../engine/postseason';
+import { hauptrundeVorbei } from '../engine/season';
 import { leererStand } from '../engine/stats';
 import { standardCoaching, type Coach, type SpielDaten, type Spieler } from '../engine/types';
 import type { SaveRecord } from './types';
@@ -80,6 +83,26 @@ export const MIGRATIONEN: Record<number, Migration> = {
         posteingang: alt.posteingang ?? [],
       },
     };
+  },
+
+  /**
+   * Format 4 -> 5 (Meilenstein 4b): Rookie-Kennzeichen, Besitzer-Ziele, Ruf, Jobsicherheit, Historie.
+   * War die Hauptrunde schon gespielt, entstehen Play-In und Playoffs aus der Abschlusstabelle.
+   */
+  4: (record) => {
+    const alt = record.daten as unknown as SpielDaten;
+    const spieler = alt.liga.spieler.map(
+      (s): Spieler => ({ ...s, neuling: s.neuling ?? s.alter <= CONFIG.generator.rookieAlterBis }),
+    );
+    const daten: SpielDaten = {
+      ...alt,
+      liga: { ...alt.liga, spieler },
+      karriere: alt.karriere ?? { ruf: 50, jobsicherheit: 60, ziele: [] },
+      historie: alt.historie ?? [],
+    };
+    sichereSaisonZiele(daten);
+    if (hauptrundeVorbei(daten.liga) && !daten.liga.postseason) erzeugePostseason(daten);
+    return { ...record, version: 5, daten };
   },
 };
 

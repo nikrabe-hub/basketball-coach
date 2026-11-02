@@ -12,6 +12,8 @@ interface Props {
   erg: SpielErgebnis;
   saison: number;
   onSpieler: (spielerId: number) => void;
+  /** Beschriftung bei Play-In und Playoffs, z. B. "Erste Runde · Spiel 3" */
+  kontext?: string | null;
 }
 
 function summe(box: TeamBox, idx: number): number {
@@ -19,7 +21,7 @@ function summe(box: TeamBox, idx: number): number {
 }
 
 /** Boxscore, Viertelergebnisse, Zusammenfassung und (falls gespeichert) Spielverlauf eines Spiels. */
-export function BoxscoreView({ liga, erg, saison, onSpieler }: Props) {
+export function BoxscoreView({ liga, erg, saison, onSpieler, kontext }: Props) {
   const [ansicht, setAnsicht] = useState<'box' | 'verlauf'>('box');
   const heim = liga.teams[erg.heim.teamId] as Team;
   const gast = liga.teams[erg.gast.teamId] as Team;
@@ -30,6 +32,7 @@ export function BoxscoreView({ liga, erg, saison, onSpieler }: Props) {
   return (
     <div className="boxscore">
       <p className="hinweis">
+        {kontext ? `${kontext} · ` : ''}
         {formatDatum(saison, erg.tag)}
         {erg.ot > 0 ? ` · ${erg.ot === 1 ? 'Verlängerung' : `${erg.ot} Verlängerungen`}` : ''}
       </p>

@@ -10,6 +10,7 @@ export type DialogState =
   | { typ: 'team'; teamId: number }
   | { typ: 'spieler'; spielerId: number }
   | { typ: 'box'; tag: number; index: number }
+  | { typ: 'serie'; serieId: number }
   | null;
 
 export interface NavState {

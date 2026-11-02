@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { CONFIG } from '../engine/config';
 import { gehaltSumme, staerkeRang, teamStaerke } from '../engine/league';
 import { verletzungText } from '../engine/injuries';
+import { RUNDEN_NAMEN } from '../engine/postseason';
 import { formatDatum, spieleVonTeam } from '../engine/schedule';
 import {
   deadlineTag,
@@ -9,8 +10,9 @@ import {
   hauptrundeVorbei,
   naechsterEigenerSpieltag,
   spielIndex,
-  zielTag,
+  zielMoeglich,
   ZIEL_TEXT,
+  hoechsteNachrichtenId as hoechsteAlteId,
   type SimulationsZiel,
 } from '../engine/season';
 import { letzteWichtigeNachricht } from '../engine/zustand';
@@ -19,7 +21,10 @@ import { CONFERENCES, DIVISIONEN, teamName } from '../engine/teams';
 import type { Liga, Nachricht, SpielDaten, SpielErgebnis, Team } from '../engine/types';
 import { ErgebnisseView } from './ErgebnisseView';
 import { fmtGeld } from './format';
+import { AwardsView } from './AwardsView';
 import { KaderTabelle } from './KaderTabelle';
+import { PlayoffsView } from './PlayoffsView';
+import { PostseasonKarte, ZielKarte } from './SaisonKarten';
 import { RotationView } from './RotationView';
 import { TaktikView } from './TaktikView';
 import type { TabId } from './nav';
@@ -39,6 +44,7 @@ interface Props {
   onTeam: (teamId: number) => void;
   onSpieler: (spielerId: number) => void;
   onBox: (tag: number, index: number) => void;
+  onSerie: (serieId: number) => void;
 }
 
 const TABS: { id: TabId; label: string; icon: string }[] = [
@@ -49,7 +55,7 @@ const TABS: { id: TabId; label: string; icon: string }[] = [
   { id: 'menue', label: 'Menü', icon: '☰' },
 ];
 
-export function GameScreen({ slot, spiel, tab, onTab, onAendern, onZuDenSlots, onTeam, onSpieler, onBox }: Props) {
+export function GameScreen({ slot, spiel, tab, onTab, onAendern, onZuDenSlots, onTeam, onSpieler, onBox, onSerie }: Props) {
   const eigenesTeam = spiel.liga.teams[spiel.userTeamId] as Team;
   const [sim, setSim] = useState<{ titel: string; fertig: number; gesamt: number } | null>(null);
   const [simFehler, setSimFehler] = useState<string | null>(null);
@@ -61,17 +67,17 @@ export function GameScreen({ slot, spiel, tab, onTab, onAendern, onZuDenSlots, o
   useEffect(() => () => lauf.current?.abbrechen(), []);
 
   const simuliere = async (ziel: SimulationsZiel) => {
-    const bis = zielTag(spiel, ziel);
-    if (bis === null || lauf.current) return;
+    if (!zielMoeglich(spiel, ziel) || lauf.current) return;
     setSimFehler(null);
     setStopp(null);
-    setSim({ titel: ZIEL_TEXT[ziel], fertig: 0, gesamt: bis - spiel.liga.tag });
-    const l = simuliereImHintergrund(spiel, bis, (fertig, gesamt) => setSim((s) => (s ? { ...s, fertig, gesamt } : s)));
+    setSim({ titel: ZIEL_TEXT[ziel], fertig: 0, gesamt: 1 });
+    const l = simuliereImHintergrund(spiel, ziel, (fertig, gesamt) => setSim((s) => (s ? { ...s, fertig, gesamt } : s)));
     lauf.current = l;
     try {
       const neu = await l.ergebnis;
       // Die Simulation hält bei wichtigen Meldungen (z. B. schwere Verletzung) vor dem Ziel an.
-      if (neu.liga.tag < bis) setStopp(letzteWichtigeNachricht(neu) ?? null);
+      const unterbrochen = letzteWichtigeNachricht(neu);
+      if (unterbrochen && unterbrochen.id > hoechsteAlteId(spiel)) setStopp(unterbrochen);
       await onAendern(neu);
     } catch (e) {
       if (!(e instanceof AbbruchFehler)) setSimFehler(`Simulation oder Speichern fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}`);
@@ -90,9 +96,7 @@ export function GameScreen({ slot, spiel, tab, onTab, onAendern, onZuDenSlots, o
         </span>
         <span>
           Saison {spiel.saison} ·{' '}
-          {hauptrundeVorbei(spiel.liga)
-            ? 'Hauptrunde beendet'
-            : formatDatum(spiel.saison, spiel.liga.tag)}
+          {phasenText(spiel)}
         </span>
       </header>
 
@@ -122,7 +126,7 @@ export function GameScreen({ slot, spiel, tab, onTab, onAendern, onZuDenSlots, o
             onAnsicht={setTeamAnsicht}
           />
         )}
-        {tab === 'liga' && <LigaTab spiel={spiel} onTeam={onTeam} onSpieler={onSpieler} onBox={onBox} />}
+        {tab === 'liga' && <LigaTab spiel={spiel} onTeam={onTeam} onSpieler={onSpieler} onBox={onBox} onSerie={onSerie} />}
         {tab === 'buero' && (
           <Platzhalter
             titel="Büro"
@@ -156,6 +160,16 @@ export function GameScreen({ slot, spiel, tab, onTab, onAendern, onZuDenSlots, o
       )}
     </div>
   );
+}
+
+/** Kurztext für die Kopfleiste: Datum, Play-In, Playoffs oder Saisonende. */
+function phasenText(spiel: SpielDaten): string {
+  const { liga } = spiel;
+  const post = liga.postseason;
+  if (!hauptrundeVorbei(liga)) return formatDatum(spiel.saison, liga.tag);
+  if (!post) return 'Hauptrunde beendet';
+  if (post.phase === 'beendet') return 'Saison beendet';
+  return post.phase === 'playin' ? 'Play-In' : `Playoffs · ${RUNDEN_NAMEN[post.runde]}`;
 }
 
 // ---------- Start ----------
@@ -233,7 +247,7 @@ function StartTab({
   const gespielt = spiele(b);
   const vorbei = hauptrundeVorbei(liga);
   const deadline = deadlineTag(liga);
-  const deadlineOffen = zielTag(spiel, 'deadline') !== null;
+  const deadlineOffen = zielMoeglich(spiel, 'deadline');
   const letzte = eigeneErgebnisse(spiel).slice(-5).reverse();
   const platz = conferencePlatz(liga, eigenesTeam.id);
 
@@ -242,10 +256,10 @@ function StartTab({
       <h1>Start</h1>
       {stopp && (
         <section className="karte stopp">
-          <h2>⏸ Simulation angehalten</h2>
+          <h2>⏸ Wichtige Meldung</h2>
           <p>{stopp.text}</p>
           <p className="hinweis">
-            Schau dir den Kader und die Rotation an. Danach kannst du die Simulation einfach fortsetzen.
+            Die Simulation wurde angehalten. Danach kannst du einfach weiter simulieren.
           </p>
           <div className="knopfreihe">
             <button className="knopf" onClick={() => { onStoppSchliessen(); onTab('team'); }}>
@@ -274,19 +288,12 @@ function StartTab({
         </div>
       </section>
 
+      {vorbei ? (
+        <PostseasonKarte spiel={spiel} onSimuliere={onSimuliere} laeuft={laeuft} fehler={fehler} onTab={onTab} />
+      ) : (
       <section className="karte">
-        <h2>{vorbei ? 'Hauptrunde beendet' : 'Nächstes Spiel'}</h2>
-        {vorbei ? (
-          <>
-            <p>
-              Endstand: {b.siege}–{b.niederlagen}, Platz {platz} im {CONFERENCES[eigenesTeam.conference]}.
-            </p>
-            <p className="hinweis">
-              Playoffs, Awards und die Offseason folgen in den nächsten Meilensteinen. Du kannst dir Tabellen,
-              Ergebnisse und Statistiken im Liga-Tab ansehen.
-            </p>
-          </>
-        ) : naechstes && gegner ? (
+        <h2>Nächstes Spiel</h2>
+        {naechstes && gegner ? (
           <>
             <div className="gegner">
               <TeamLogo kuerzel={gegner.kuerzel} farbe1={gegner.farbe1} farbe2={gegner.farbe2} groesse={40} />
@@ -335,6 +342,7 @@ function StartTab({
           Tabellen &amp; Spielplan ansehen
         </button>
       </section>
+      )}
 
       {letzte.length > 0 && (
         <section className="karte">
@@ -350,10 +358,7 @@ function StartTab({
       )}
 
       <Posteingang spiel={spiel} onSpieler={onSpieler} onAendern={onAendern} />
-      <section className="karte">
-        <h2>Ziele &amp; Jobsicherheit</h2>
-        <p className="hinweis">Die Besitzer-Ziele kommen in Meilenstein 6.</p>
-      </section>
+      <ZielKarte spiel={spiel} />
     </>
   );
 }
@@ -455,7 +460,7 @@ function TeamTab({
 
 // ---------- Posteingang ----------
 
-const NACHRICHT_ICON: Record<Nachricht['typ'], string> = { verletzung: '🩹', rueckkehr: '✅', moral: '😠', info: 'ℹ️' };
+const NACHRICHT_ICON: Record<Nachricht['typ'], string> = { verletzung: '🩹', rueckkehr: '✅', moral: '😠', info: 'ℹ️', playoffs: '🏆' };
 
 function Posteingang({
   spiel,
@@ -521,9 +526,11 @@ function Posteingang({
 
 // ---------- Liga ----------
 
-type LigaAnsicht = 'tabelle' | 'ergebnisse' | 'statistik' | 'teams' | 'spielplan';
+type LigaAnsicht = 'tabelle' | 'playoffs' | 'awards' | 'ergebnisse' | 'statistik' | 'teams' | 'spielplan';
 const LIGA_ANSICHTEN: { id: LigaAnsicht; label: string }[] = [
   { id: 'tabelle', label: 'Tabelle' },
+  { id: 'playoffs', label: 'Playoffs' },
+  { id: 'awards', label: 'Awards' },
   { id: 'ergebnisse', label: 'Ergebnisse' },
   { id: 'statistik', label: 'Statistik' },
   { id: 'teams', label: 'Teams' },
@@ -535,13 +542,16 @@ function LigaTab({
   onTeam,
   onSpieler,
   onBox,
+  onSerie,
 }: {
   spiel: SpielDaten;
   onTeam: (id: number) => void;
   onSpieler: (id: number) => void;
   onBox: (tag: number, index: number) => void;
+  onSerie: (serieId: number) => void;
 }) {
-  const [ansicht, setAnsicht] = useState<LigaAnsicht>('tabelle');
+  const nachseason = spiel.liga.postseason !== undefined && spiel.liga.postseason.phase !== 'beendet';
+  const [ansicht, setAnsicht] = useState<LigaAnsicht>(nachseason ? 'playoffs' : 'tabelle');
   return (
     <>
       <h1>Liga</h1>
@@ -559,6 +569,8 @@ function LigaTab({
         ))}
       </div>
       {ansicht === 'tabelle' && <TabelleView liga={spiel.liga} userTeamId={spiel.userTeamId} onTeam={onTeam} />}
+      {ansicht === 'playoffs' && <PlayoffsView spiel={spiel} onSerie={onSerie} onBox={onBox} />}
+      {ansicht === 'awards' && <AwardsView spiel={spiel} onSpieler={onSpieler} />}
       {ansicht === 'ergebnisse' && (
         <ErgebnisseView liga={spiel.liga} saison={spiel.saison} userTeamId={spiel.userTeamId} onBox={onBox} />
       )}

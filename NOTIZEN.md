@@ -7,8 +7,9 @@ Entscheidungen, offene Punkte und bekannte Bugs. Bei neuen Sitzungen zuerst lese
 - **Meilenstein 1 (Grundgerüst): fertig und auf dem Handy abgenommen.**
 - **Meilenstein 2 (Liga-Generator): fertig und auf dem Handy abgenommen** (Saisonlänge, Teamwahl, Kader, Tabellen ok).
 - **Meilenstein 3 (Spiel-Engine): fertig und auf dem Handy abgenommen.**
-- **Meilenstein 4a (Coaching): Code fertig, in der Cloud getestet.** Rotation, Taktik, Müdigkeit, Verletzungen, Moral, Endspiel-Taktik, Posteingang. Wartet auf den Handy-Test (Checkliste unten).
-- Nächster Schritt: Meilenstein 4b (Tiebreaker, Play-In, Playoffs, Awards, Besitzer-Ziele/Trainer-Ruf). Vorher kurzer Plan und OK abwarten.
+- **Meilenstein 4a (Coaching): fertig und auf dem Handy abgenommen** (läuft flüssig bis zum Saisonende).
+- **Meilenstein 4b (Play-In, Playoffs, Awards, Ziele): Code fertig, in der Cloud getestet.** Wartet auf den Handy-Test (Checkliste unten). Spielstand-Format jetzt 5.
+- Nächster Schritt: Meilenstein 5 (Offseason: Draft, Verträge, Free Agency, Spielerentwicklung, **neue Saison**). Vorher kurzer Plan und OK abwarten. Bis dahin endet das Spiel nach den Finals ("Saison beendet").
 - Offene Frage: Das GitHub-Repo ist noch öffentlich, obwohl privat gewünscht war (GitHub -> Settings -> Danger Zone -> Change visibility).
 
 ## Entscheidungen
@@ -45,6 +46,25 @@ Entscheidungen, offene Punkte und bekannte Bugs. Bei neuen Sitzungen zuerst lese
 - **Oberfläche:** Team-Tab hat drei Ansichten (Kader | Rotation | Taktik). Kader-Tabelle mit Moral- und Status-Spalte, Spielerkarte mit "Zustand", Boxscore listet Verletzungen des Spiels, Start-Tab hat den Posteingang.
 - Skripte: `npm run balance` (Gesamt-Balance inkl. Verlängerungen, Verletzungen, Moral), `npm run taktik` (Taktik- und Rotationswirkung; Parameter: Spiele je Messung, Teile "1,2,3").
 
+## Meilenstein 4b: Playoffs und Karriere (Entscheidungen)
+
+- **Kein Saisonwechsel in 4b** (Entscheidung des Nutzers): Neue Saison kommt zusammen mit der Offseason in Meilenstein 5.
+- **Tiebreaker** (`stats.ts`, `sortiereTabelle`): Siegquote, dann Direktvergleich in der Gruppe, dann Bilanz gegen Division-Gegner (nur wenn alle aus derselben Division), dann Bilanz gegen die eigene Conference, dann Punktedifferenz, dann Team-ID (fester Ersatz für den Münzwurf). Vereinfachte NBA-Regeln.
+- **Play-In**: Plätze 7–10 je Conference. 7 gegen 8 (Sieger = Platz 7), 9 gegen 10, Finale: Verlierer 7/8 gegen Sieger 9/10 (Sieger = Platz 8). Platz 1–6 direkt in die Playoffs.
+- **Playoffs**: 16 Teams, Best-of-7, Runde 1 = (1,8) (4,5) (3,6) (2,7), danach feste Bracket-Folge. Heimrecht 2-2-1-1-1 für das bessere Team (Finals nach Hauptrunden-Bilanz). Alle Serien einer Runde laufen im Gleichschritt (ein Spieltag pro Tag), eine Runde ist erst zu Ende, wenn alle Serien fertig sind.
+- **Datenmodell**: `liga.postseason` (Phase, Play-In, Serien, Tage, Meister, Awards) entsteht automatisch nach dem letzten Hauptrunden-Tag. Postseason-Tag d hat den Kalender-Tag `spielplan.length + d`; Ergebnisse stehen in `liga.ergebnisse[tag]`. Playoff-Spiele ändern **nicht** Tabelle und Saison-Statistik der Hauptrunde.
+- **Rotation in den Playoffs**: Automatik nutzt `standardMinutenPlayoffs` (Stars spielen mehr, ca. 37 statt 34 Min.). Eigene Rotation/Taktik gilt unverändert auch in den Playoffs.
+- **Simulationsziele**: Hauptrunde wie bisher; danach "Nächstes Spiel", "Bis Serienende" (bzw. Play-In/Runde), "Bis Ende der Playoffs". Wichtige Meldungen (z. B. schwere Verletzung, Ausscheiden) halten weiterhin an.
+- **Awards** (`awards.ts`, nach der Hauptrunde): MVP, Verteidiger, Rookie, Sechster Mann, Most Improved, Trainer des Jahres, All-League 1–3, Finals-MVP nach den Finals. Mindestens 60 % der Spiele nötig (Rookie 40 %). Most Improved braucht `ovrVorjahr` und gibt es deshalb erst ab Saison 2.
+- **Besitzer-Ziele und Jobsicherheit** (`karriere.ts`): Erwartung aus Teamstärke-Rang und Besitzer-Typ; Ziel "Siege" und optional "Playoff-Runde". Nach den Finals wird bewertet: Jobsicherheit und Coach-Ruf ändern sich, Eintrag in die Historie, wichtige Nachricht. **Keine Entlassung** vor Meilenstein 6.
+- Alle Zahlen in `config.ts` (`awards`, `karriere`, `spiel.rotation.standardMinutenPlayoffs`).
+
+## Geprüft (Meilenstein 4b)
+
+- `npm test`: 114 Tests grün (Tiebreaker, Play-In, Bracket, Heimrecht, Serienende, Ziele, Awards, Migration 4->5, Simulation in Etappen).
+- Cloud-Messung (30 Saisons à 82 Spiele, `npm run playoffs`): besseres Team gewinnt Runde 1 73 %, Runde 2 68 %, Conference Finals 68 %, Finals 60 %; Ø 5,5 Spiele pro Serie, 7 Spiele in 24 % der Serien (NBA ca. 20 %); Meister kommt in 77 % aus den Top 3 nach Teamstärke, in 97 % aus den Top 8; Stars spielen 37 Min. in den Playoffs (33,7 in der Hauptrunde). Dauer ca. 2,7 s pro Saison inkl. Playoffs (Node, ohne Handy).
+- Browser-Test (Handy-Viewport): Hauptrunde -> Play-In -> Playoffs -> Saisonende, Tableau, Serien-Dialog, Boxscore mit Kontext, Awards, Speichern/Neuladen.
+
 ## Geprüft (Meilenstein 3)
 
 - `npm test`: 72 Tests grün (Zufallsgenerator, Liga, Spielplan, Spiel-Simulation inkl. Boxscore-Konsistenz, Saison-Simulation, Etappen-Unabhängigkeit, Play-by-Play, Speichern, Migrationen 1->2->3).
@@ -61,12 +81,25 @@ Entscheidungen, offene Punkte und bekannte Bugs. Bei neuen Sitzungen zuerst lese
 
 ## Noch NICHT geprüft
 
-- M4a auf dem echten Handy (Checkliste unten), v. a. Dauer einer ganzen Saison (Rotations-Logik rechnet mehr als in M3) und Bedienung der Regler.
+- M4b auf dem echten Handy (Checkliste unten), v. a. Gesamtdauer Hauptrunde + Playoffs und Lesbarkeit des Tableaus.
 
 - Verhalten auf dem echten Handy: Geschwindigkeit der Simulation, Web Worker in der APK, Wischen der breiten Tabellen, Zurück-Taste während der Simulation.
 - Spielstände aus Meilenstein 2 auf dem Handy: werden beim Laden auf Format 3 gehoben (nur per Unit-Test geprüft).
 
-## Checkliste Handy-Test (Meilenstein 4a)
+## Checkliste Handy-Test (Meilenstein 4b)
+
+1. Neue APK über die alte installieren. Ein alter Spielstand (Format 4, auch mitten in der Saison oder am Saisonende) muss sich laden lassen. Ist die Hauptrunde schon vorbei, entsteht direkt das Play-In.
+2. Start-Tab: "Ziele & Jobsicherheit" zeigt Besitzer-Typ, Ziele (○ offen), Jobsicherheit und Ruf. Sind die Ziele für dein Team realistisch?
+3. "Bis Saisonende" (Hauptrunde). Wie lange dauert es? Am Ende kommt eine Meldung, ob du direkt in den Playoffs, im Play-In oder draußen bist.
+4. Play-In: Start-Tab zeigt dein Spiel (heim/auswärts), Liga -> Playoffs -> Play-In zeigt die Spiele beider Conferences. Boxscore antippen zeigt "Play-In" im Kontext.
+5. Playoffs: "Nächstes Spiel simulieren", "Bis Serienende", "Bis Ende der Playoffs". Liga -> Playoffs: Runden-Tabs, Serienkarten, Serie antippen -> Spiele -> Boxscore. Stimmt das Heimrecht (2-2-1-1-1)? Hält die Simulation bei Meldungen an?
+6. Wenn dein Team ausscheidet oder nicht dabei ist: "Runde simulieren" und "Bis Ende der Playoffs" müssen gehen. Wie lange dauern die ganzen Playoffs (Sekunden notieren)?
+7. Nach den Finals: Start-Tab "Saison beendet" mit Meister und deinem Ergebnis. Liga -> Awards: MVP, Verteidiger, Rookie, Sechster Mann, Trainer, All-League, Finals-MVP, Historie. Sind die Preisträger plausibel? (Most Improved fehlt in Saison 1, das ist Absicht.)
+8. Ziele-Karte nach der Saison: ✔/✖ pro Ziel, Jobsicherheit und Ruf haben sich verändert.
+9. App schließen und neu öffnen: Tableau, Awards und Karte bleiben erhalten. Zurück-Taste schließt Serien-Dialog und Boxscore der Reihe nach.
+10. Zu viele Überraschungen oder zu wenige? Zu viele 7-Spiele-Serien? Notieren, Zahlen in `config.ts`.
+
+## Checkliste Handy-Test (Meilenstein 4a, erledigt)
 
 1. Neue APK über die alte installieren. Alter Spielstand (Format 3) muss sich laden lassen; alle Spieler haben Moral 70, niemand ist verletzt.
 2. Team-Tab -> Rotation: Automatik an/aus. Ohne Automatik: Regler pro Spieler (0–40 Min), Starter-Häkchen (genau 5), "Vorschlag laden". Summe ist 240 oder wird umgerechnet. Läuft das Ziehen der Regler flüssig? Bleiben die Werte nach App-Neustart erhalten?
@@ -93,7 +126,8 @@ Entscheidungen, offene Punkte und bekannte Bugs. Bei neuen Sitzungen zuerst lese
 - App-Icon: aktuell das Standard-Icon von Capacitor. Kommt im Feinschliff (Meilenstein 7).
 - Helles Design optional (Meilenstein 7).
 - Auszeiten (Timeouts) fehlen bewusst; Verlängerungen daher ca. 4,3 % statt NBA ca. 6 %.
-- Tabellen-Tiebreaker nach Direktvergleich/Division: kommt mit den Playoffs (Meilenstein 4b).
+- Tiebreaker sind gegenüber der NBA vereinfacht (siehe M4b).
+- Play-In-/Playoff-Spiele haben (noch) keine eigene Statistik-Tabelle; Spielerstatistik im Liga-Tab gilt nur für die Hauptrunde.
 - Passung der Angriffs-Taktiken zum Kader ist schwach (siehe M4a Entscheidungen); bei Bedarf stärker machen.
 - Editor für Team- und Spielernamen (Brief: "optional später").
 

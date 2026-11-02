@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit",
     "cap:sync": "cap sync android",
     "balance": "tsx scripts/balance.ts",
-    "taktik": "tsx scripts/taktik.ts"
+    "taktik": "tsx scripts/taktik.ts",
+    "playoffs": "tsx scripts/playoffs.ts"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.3",

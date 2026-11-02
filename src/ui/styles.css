@@ -536,3 +536,33 @@ button.slot {
 .nachricht-text small { color: var(--text-leise); font-size: 0.75rem; }
 .karte.stopp { border-color: var(--akzent); }
 .textknopf { padding: 0; border: 0; background: none; color: var(--akzent); font: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; min-height: 32px; }
+
+/* --- M4b: Playoffs, Serien, Awards, Ziele --- */
+.serien { display: grid; grid-template-columns: 1fr; gap: 10px; }
+.serie-karte { display: flex; flex-direction: column; gap: 4px; width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid var(--rand); border-radius: 12px; background: var(--bg-karte); color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.serie-karte.eigene { border-color: var(--akzent); }
+.serie-karte small { color: var(--text-leise); font-size: 0.8rem; }
+.serie-team { display: flex; align-items: center; gap: 8px; min-height: 32px; }
+.serie-team.verloren { opacity: 0.55; }
+.serie-team.sieger strong { color: var(--gut); }
+.serie-seed { width: 18px; color: var(--text-leise); font-size: 0.8rem; text-align: right; }
+.serie-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.serie-spielnr { color: var(--text-leise); font-size: 0.8rem; min-width: 56px; }
+.playin-titel { margin: 10px 0 4px; color: var(--text-leise); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; }
+.award { display: flex; flex-direction: column; gap: 2px; padding: 8px 0; border-bottom: 1px solid var(--rand); }
+.award:last-child { border-bottom: 0; }
+.award-titel { color: var(--text-leise); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
+.award-team { color: var(--text-leise); font-weight: 400; font-size: 0.85rem; }
+.allleague { padding: 8px 0; border-bottom: 1px solid var(--rand); }
+.allleague:last-child { border-bottom: 0; }
+.allleague-spieler { display: block; text-decoration: none; min-height: 36px; text-align: left; color: var(--text); font-weight: 600; }
+.historie-zeile { display: flex; justify-content: space-between; gap: 10px; align-items: center; min-height: 44px; border-bottom: 1px solid var(--rand); font-size: 0.92rem; }
+.historie-zeile:last-child { border-bottom: 0; }
+.historie-meister { font-weight: 700; }
+.ziele { list-style: none; margin: 8px 0 12px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.ziele li { display: flex; gap: 10px; align-items: flex-start; font-size: 0.92rem; }
+.ziele li.erfuellt span:first-child { color: var(--gut); }
+.ziele li.verfehlt span:first-child { color: var(--schlecht); }
+.fortschritt-balken.gefahr { background: var(--schlecht); }
+@media (min-width: 640px) { .serien { grid-template-columns: 1fr 1fr; } }
+.award .textknopf { text-align: left; min-height: 36px; }

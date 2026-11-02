@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { tagTitel } from '../engine/postseason';
 import { formatDatum } from '../engine/schedule';
 import type { Liga, Team } from '../engine/types';
 import { TeamLogo } from './TeamLogo';
@@ -31,9 +32,7 @@ export function ErgebnisseView({ liga, saison, userTeamId, onBox }: Props) {
         </button>
         <div>
           <strong>{formatDatum(saison, tag)}</strong>
-          <span>
-            Tag {tag + 1} von {liga.spielplan.length}
-          </span>
+          <span>{tagTitel(liga, tag) ?? `Tag ${tag + 1} von ${liga.spielplan.length}`}</span>
         </div>
         <button
           className="knopf zweit klein"

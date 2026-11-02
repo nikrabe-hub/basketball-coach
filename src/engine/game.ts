@@ -43,6 +43,8 @@ export interface SpielOptionen {
   pbp: boolean;
   /** Spiele pro Team in der Hauptrunde (skaliert die Dauer von Verletzungen); Standard 82 */
   saisonLaenge?: number;
+  /** Playoff-Rotation: Stars spielen mehr (nur für die automatische Rotation) */
+  playoffs?: boolean;
 }
 
 type Zug = 'iso' | 'pnr' | 'post' | 'spot' | 'drive' | 'fast' | 'putback';
@@ -207,7 +209,7 @@ function erzeugeLive(s: Spieler, seite: 0 | 1, rang: number): Live {
   };
 }
 
-function erzeugeSeite(m: Mannschaft, index: 0 | 1): Seite {
+function erzeugeSeite(m: Mannschaft, index: 0 | 1, playoffs = false): Seite {
   const sortiert = [...m.spieler].sort((x, y) => y.ovr - x.ovr || x.id - y.id);
   const live = sortiert.map((s, i) => erzeugeLive(s, index, i));
   // Sind weniger als 5 Spieler gesund, spielen die am wenigsten verletzten mit.
@@ -240,7 +242,7 @@ function erzeugeSeite(m: Mannschaft, index: 0 | 1): Seite {
   };
   const rot = m.coaching?.rotation;
   if (rot && !rot.auto) richteRotationEin(seite, rot.minuten, rot.starter);
-  else richteRotationEin(seite, null, []);
+  else richteRotationEin(seite, null, [], playoffs);
   return seite;
 }
 
@@ -249,12 +251,12 @@ function erzeugeSeite(m: Mannschaft, index: 0 | 1): Seite {
  * Ohne Angabe (`minuten` = null, automatische Rotation) gelten die Standard-Minuten nach Rang der
  * einsatzbereiten Spieler, die Starter ergeben sich aus der Rangfolge.
  */
-function richteRotationEin(seite: Seite, minuten: Record<string, number> | null, starterIds: number[]): void {
+function richteRotationEin(seite: Seite, minuten: Record<string, number> | null, starterIds: number[], playoffs = false): void {
   const R = S.rotation;
   const verfuegbar = seite.live.filter((l) => !l.draussen);
   const ziel = new Map<Live, number>();
   for (const l of verfuegbar) {
-    const m = minuten ? clamp(minuten[String(l.s.id)] ?? 0, 0, 48) : (R.standardMinuten[l.rang] ?? 0);
+    const m = minuten ? clamp(minuten[String(l.s.id)] ?? 0, 0, 48) : ((playoffs ? R.standardMinutenPlayoffs : R.standardMinuten)[l.rang] ?? 0);
     if (m > 0) ziel.set(l, m);
   }
   // Zu wenige Spieler mit Minuten (z. B. wegen Verletzungen): die Besten ergänzen
@@ -954,7 +956,7 @@ function beginnePeriode(g: Spielzustand, periode: number): void {
 export function simuliereSpiel(rng: Rng, heim: Mannschaft, gast: Mannschaft, opt: SpielOptionen): SpielErgebnis {
   const g: Spielzustand = {
     rng,
-    seiten: [erzeugeSeite(heim, 0), erzeugeSeite(gast, 1)],
+    seiten: [erzeugeSeite(heim, 0, opt.playoffs), erzeugeSeite(gast, 1, opt.playoffs)],
     periode: 0,
     sek: 0,
     uhr: 0,

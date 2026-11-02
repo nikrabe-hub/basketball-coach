@@ -72,6 +72,10 @@ export interface Spieler {
   moral: number;
   /** null = fit */
   verletzung: Verletzung | null;
+  /** Rookie in dieser Saison (ab Meilenstein 4b; für die Wahl zum Rookie des Jahres) */
+  neuling: boolean;
+  /** Gesamtwertung vor einem Jahr (ab Meilenstein 5, für "Most Improved"); fehlt in der ersten Saison */
+  ovrVorjahr?: number;
 }
 
 /** Eine laufende Verletzung. Die Dauer zählt in Spielen des eigenen Teams. */
@@ -240,6 +244,134 @@ export interface Liga {
   /** ergebnisse[tag][i] gehört zu spielplan[tag][i]; nur für schon gespielte Tage vorhanden */
   ergebnisse: SpielErgebnis[][];
   stand: Saisonstand;
+  /** Play-In und Playoffs; entsteht, sobald die Hauptrunde gespielt ist (ab Meilenstein 4b) */
+  postseason?: Postseason;
+}
+
+// ---------- Play-In, Playoffs, Awards (ab Meilenstein 4b) ----------
+
+export type PostPhase = 'playin' | 'playoffs' | 'beendet';
+
+/** Verweis auf ein gespieltes Spiel: liga.ergebnisse[tag][index] */
+export interface SpielRef {
+  tag: number;
+  index: number;
+}
+
+/** Ein angesetztes Spiel in Play-In oder Playoffs. */
+export interface PostSpiel extends Spiel {
+  art: 'playin' | 'serie';
+  /** Index in postseason.playin bzw. postseason.serien */
+  ref: number;
+}
+
+export type PlayInTyp = '7v8' | '9v10' | 'finale8';
+
+export interface PlayInSpiel {
+  id: number;
+  conference: 0 | 1;
+  typ: PlayInTyp;
+  /** Teams stehen bei "finale8" erst nach den ersten Spielen fest */
+  heim: number | null;
+  gast: number | null;
+  spiel: SpielRef | null;
+  sieger: number | null;
+  verlierer: number | null;
+}
+
+export interface Serie {
+  id: number;
+  /** 1 = erste Runde, 2 = zweite Runde, 3 = Conference Finals, 4 = Finals */
+  runde: 1 | 2 | 3 | 4;
+  /** null = Finals */
+  conference: 0 | 1 | null;
+  /** Position im Tableau der Runde (von oben nach unten) */
+  slot: number;
+  /** Team mit Heimvorteil */
+  oben: number;
+  unten: number;
+  /** Platz in der Conference-Setzliste (1–8) */
+  seedOben: number;
+  seedUnten: number;
+  siegeOben: number;
+  siegeUnten: number;
+  spiele: SpielRef[];
+  sieger: number | null;
+}
+
+export interface AwardPreis {
+  spielerId: number;
+  teamId: number;
+  /** Kurze Begründung, z. B. "28,1 Punkte, 7,2 Rebounds" */
+  text: string;
+}
+
+export interface Awards {
+  mvp: AwardPreis | null;
+  verteidiger: AwardPreis | null;
+  rookie: AwardPreis | null;
+  sechsterMann: AwardPreis | null;
+  /** null, solange es keine Vorjahreswerte gibt (erste Saison) */
+  mostImproved: AwardPreis | null;
+  finalsMvp: AwardPreis | null;
+  trainer: { teamId: number; text: string } | null;
+  /** Erstes, zweites und drittes All-League-Team (je 5 Spieler-IDs) */
+  allLeague: [number[], number[], number[]];
+}
+
+export interface Postseason {
+  phase: PostPhase;
+  /** Setzliste nach der Hauptrunde je Conference (Team-IDs, Platz 1 bis 15) */
+  tabelle: [number[], number[]];
+  playin: PlayInSpiel[];
+  /** Die acht Playoff-Teams je Conference nach Platz (-1 = noch offen) */
+  seeds: [number[], number[]];
+  serien: Serie[];
+  /** Aktuelle Runde: 0 = Play-In, 1–4 = Playoffs */
+  runde: number;
+  /** Alle bisher angesetzten Tage; Tag n gehört zu Kalendertag spielplan.length + n */
+  tage: PostSpiel[][];
+  meister: number | null;
+  awards: Awards;
+}
+
+// ---------- Coach-Karriere (ab Meilenstein 4b) ----------
+
+/**
+ * Ziel des Besitzers. `runde` = so weit sollen die Playoffs führen:
+ * 0 = Play-In erreichen, 1 = Playoffs, 2 = zweite Runde, 3 = Conference Finals, 4 = Finals, 5 = Titel.
+ */
+export interface SaisonZiel {
+  typ: 'siege' | 'runde';
+  text: string;
+  wert: number;
+  /** null = noch offen */
+  erfuellt: boolean | null;
+}
+
+export interface Karriere {
+  /** Coach-Ruf 0–100 */
+  ruf: number;
+  /** Jobsicherheit 0–100 */
+  jobsicherheit: number;
+  /** Ziele der laufenden Saison */
+  ziele: SaisonZiel[];
+}
+
+/** Abschluss einer Saison für die Liga-Historie. */
+export interface SaisonRueckblick {
+  saison: number;
+  meisterId: number;
+  /** Verlierer der Finals */
+  finalGegnerId: number;
+  userSiege: number;
+  userNiederlagen: number;
+  /** z. B. "Meister", "Conference Finals", "Playoffs verpasst" */
+  userErgebnis: string;
+  ziele: SaisonZiel[];
+  jobsicherheit: number;
+  ruf: number;
+  awards: Awards;
 }
 
 // ---------- Coaching (ab Meilenstein 4) ----------
@@ -272,7 +404,7 @@ export interface Coaching {
   rotation: Rotation;
 }
 
-export type NachrichtTyp = 'verletzung' | 'rueckkehr' | 'moral' | 'info';
+export type NachrichtTyp = 'verletzung' | 'rueckkehr' | 'moral' | 'info' | 'playoffs';
 
 export interface Nachricht {
   id: number;
@@ -304,6 +436,10 @@ export interface SpielDaten {
   coaching: Coaching;
   /** Meldungen, neueste zuletzt */
   posteingang: Nachricht[];
+  /** Ruf, Jobsicherheit und Besitzer-Ziele (ab Meilenstein 4b) */
+  karriere: Karriere;
+  /** Abgeschlossene Saisons, älteste zuerst (ab Meilenstein 4b) */
+  historie: SaisonRueckblick[];
 }
 
 export interface Einstellungen {
@@ -327,6 +463,8 @@ export function neuesSpiel(
     einstellungen: { pbp: true },
     coaching: standardCoaching(),
     posteingang: [],
+    karriere: { ruf: 50, jobsicherheit: 60, ziele: [] },
+    historie: [],
   };
 }
 

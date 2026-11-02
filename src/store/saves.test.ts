@@ -2,7 +2,8 @@ import 'fake-indexeddb/auto';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { CONFIG } from '../engine/config';
 import { generiereLiga } from '../engine/league';
-import { neuesSpiel } from '../engine/types';
+import { hauptrundeVorbei, simuliereZiel } from '../engine/season';
+import { neuesSpiel, type Liga } from '../engine/types';
 import { BasketballDb } from './db';
 import { migrate } from './migrations';
 import { SaveStore } from './saves';
@@ -129,11 +130,32 @@ describe('SaveStore', () => {
     await db.saves.put({ slot: 3, version: 3, erstelltAm: 1, geaendertAm: 2, daten: m3 } as unknown as SaveRecord);
 
     const geladen = await store.laden(3);
-    expect(geladen?.version).toBe(4);
+    expect(geladen?.version).toBe(CONFIG.saveVersion);
     expect(geladen?.daten.liga.spieler.every((s) => s.moral === CONFIG.moral.start && s.verletzung === null)).toBe(true);
     expect(geladen?.daten.coaching.taktik.verteidigung).toBe('mann');
     expect(geladen?.daten.coaching.rotation).toEqual({ auto: true, starter: [], minuten: {} });
     expect(geladen?.daten.posteingang).toEqual([]);
+  });
+
+  it('hebt einen Spielstand aus Meilenstein 4a (Format 4) auf Format 5: Rookie-Kennzeichen, Ziele, Karriere, Play-In nach der Hauptrunde', async () => {
+    const sp = structuredClone(spiel('Vier'));
+    // Hauptrunde komplett spielen, dann auf das Format 4 zurückbauen
+    simuliereZiel(sp, 'saisonende');
+    while (!hauptrundeVorbei(sp.liga)) simuliereZiel(sp, 'saisonende');
+    const m4 = structuredClone(sp) as unknown as Record<string, unknown>;
+    delete m4.karriere;
+    delete m4.historie;
+    delete (m4.liga as Record<string, unknown>).postseason;
+    (m4.liga as Liga).spieler.forEach((s) => delete (s as unknown as Record<string, unknown>).neuling);
+    await db.saves.put({ slot: 3, version: 4, erstelltAm: 1, geaendertAm: 2, daten: m4 } as unknown as SaveRecord);
+
+    const geladen = await store.laden(3);
+    expect(geladen?.version).toBe(5);
+    const d = geladen!.daten;
+    expect(d.liga.spieler.every((s) => typeof s.neuling === 'boolean')).toBe(true);
+    expect(d.karriere.ziele.length).toBeGreaterThan(0);
+    expect(d.historie).toEqual([]);
+    expect(d.liga.postseason?.phase).toBe('playin');
   });
 });
 

@@ -5,17 +5,31 @@ import { mischeSeed, Rng } from './rng';
 import { verbucheErgebnis } from './stats';
 import type { Coaching, Liga, SpielDaten, SpielErgebnis } from './types';
 import { verarbeiteSpielZustand } from './zustand';
+import {
+  erzeugePostseason,
+  laufendeSerieVon,
+  nochImRennen,
+  schaetzeRestTage,
+  simuliereNachseasonTag,
+  spieleAmTag,
+} from './postseason';
 
 /** Wie viele eigene Spiele ihren Play-by-Play behalten. */
 const PBP_BEHALTEN = 10;
 
-export type SimulationsZiel = 'naechstesSpiel' | 'woche' | 'deadline' | 'saisonende';
+/**
+ * Simulationsziele. Hauptrunde: nächstes Spiel, Woche, Deadline, Ende der Hauptrunde.
+ * Play-In und Playoffs: nächstes Spiel, bis zum Ende der Serie (bzw. Runde) und bis zum Ende der Playoffs.
+ */
+export type SimulationsZiel = 'naechstesSpiel' | 'woche' | 'deadline' | 'saisonende' | 'serie' | 'playoffsEnde';
 
 export const ZIEL_TEXT: Record<SimulationsZiel, string> = {
   naechstesSpiel: 'Nächstes Spiel simulieren',
   woche: 'Eine Woche simulieren',
   deadline: 'Bis zur Trade Deadline',
-  saisonende: 'Bis zum Saisonende',
+  saisonende: 'Bis zum Ende der Hauptrunde',
+  serie: 'Bis zum Ende der Serie',
+  playoffsEnde: 'Bis zum Ende der Playoffs',
 };
 
 export function mannschaftVon(liga: Liga, teamId: number, coaching?: Coaching): Mannschaft {
@@ -68,12 +82,25 @@ export function zielTag(spiel: SpielDaten, ziel: SimulationsZiel): number | null
     }
     case 'saisonende':
       return ende;
+    case 'serie':
+    case 'playoffsEnde':
+      return null;
   }
+}
+
+/** Ist das Ziel im aktuellen Zustand sinnvoll (Hauptrunde, Play-In oder Playoffs)? */
+export function zielMoeglich(spiel: SpielDaten, ziel: SimulationsZiel): boolean {
+  const { liga } = spiel;
+  if (!hauptrundeVorbei(liga)) return zielTag(spiel, ziel) !== null;
+  const post = liga.postseason;
+  if (!post || post.phase === 'beendet') return false;
+  return ziel === 'naechstesSpiel' || ziel === 'serie' || ziel === 'playoffsEnde';
 }
 
 /** Spielt einen Kalendertag (alle Spiele dieses Tages). Verändert `spiel.liga`. */
 export function simuliereTag(spiel: SpielDaten): SpielErgebnis[] {
   const { liga } = spiel;
+  if (hauptrundeVorbei(liga)) return simuliereNachseasonTag(spiel);
   const tag = liga.tag;
   const spiele = liga.spielplan[tag];
   if (!spiele) throw new Error(`Kein Spieltag ${tag}`);
@@ -104,6 +131,8 @@ export function simuliereTag(spiel: SpielDaten): SpielErgebnis[] {
   liga.ergebnisse[tag] = ergebnisse;
   liga.tag = tag + 1;
   kuerzePbp(spiel);
+  // Nach dem letzten Tag der Hauptrunde stehen Play-In und Playoffs an
+  if (hauptrundeVorbei(liga)) erzeugePostseason(spiel);
   return ergebnisse;
 }
 
@@ -142,6 +171,54 @@ export function simuliereBis(spiel: SpielDaten, ziel: number, opt: SimulationsOp
   return true;
 }
 
+/**
+ * Simuliert in Play-In und Playoffs, bis das Ziel erreicht ist oder (bei einer wichtigen Meldung) früher.
+ * 'naechstesSpiel': bis das eigene Team gespielt hat (ist es ausgeschieden: bis zum Ende der Runde).
+ * 'serie': bis die eigene Serie entschieden ist, sonst bis zum Ende der Runde. Rückgabe wie `simuliereBis`.
+ */
+function simuliereNachseasonBis(spiel: SpielDaten, ziel: SimulationsZiel, opt: SimulationsOptionen): boolean {
+  const { liga } = spiel;
+  const post = liga.postseason;
+  if (!post) return true;
+  const u = spiel.userTeamId;
+  const imRennen = nochImRennen(post, u);
+  const startPhase = post.phase;
+  const startRunde = post.runde;
+  const eigeneSerie = laufendeSerieVon(post, u)?.id ?? null;
+  let fertig = 0;
+
+  const beendet = () => post.phase === 'beendet';
+  while (!beendet()) {
+    const letzteId = hoechsteNachrichtenId(spiel);
+    simuliereTag(spiel);
+    fertig++;
+    opt.onFortschritt?.(fertig, fertig + Math.ceil(schaetzeRestTage(post)));
+    if (beendet()) break;
+
+    const heute = post.tage[post.tage.length - 1] ?? [];
+    const eigenGespielt = heute.some((g) => g.heim === u || g.gast === u);
+    const abschnittVorbei = post.phase !== startPhase || post.runde !== startRunde;
+    const eigeneSerieFertig = eigeneSerie !== null && post.serien[eigeneSerie]?.sieger !== null;
+    if (ziel === 'naechstesSpiel' && ((imRennen && eigenGespielt) || (!imRennen && abschnittVorbei))) break;
+    if (ziel === 'serie' && (abschnittVorbei || eigeneSerieFertig)) break;
+    if (hatNeueWichtigeNachricht(spiel, letzteId)) return false;
+  }
+  opt.onFortschritt?.(fertig, fertig);
+  return true;
+}
+
+/**
+ * Simuliert ein Ziel (siehe SimulationsZiel) in Hauptrunde, Play-In oder Playoffs. Verändert `spiel`.
+ * Rückgabe: true, wenn das Ziel erreicht wurde; false, wenn eine wichtige Meldung früher angehalten hat.
+ */
+export function simuliereZiel(spiel: SpielDaten, ziel: SimulationsZiel, opt: SimulationsOptionen = {}): boolean {
+  if (!hauptrundeVorbei(spiel.liga)) {
+    const bis = zielTag(spiel, ziel);
+    return bis === null ? true : simuliereBis(spiel, bis, opt);
+  }
+  return simuliereNachseasonBis(spiel, ziel, opt);
+}
+
 export function hoechsteNachrichtenId(spiel: SpielDaten): number {
   return spiel.posteingang.reduce((m, n) => Math.max(m, n.id), 0);
 }
@@ -165,5 +242,5 @@ export function eigeneErgebnisse(spiel: SpielDaten): { erg: SpielErgebnis; index
 
 /** Position eines Spiels des Teams im Spielplan des Tages (für den Zugriff auf liga.ergebnisse). */
 export function spielIndex(liga: Liga, tag: number, teamId: number): number {
-  return (liga.spielplan[tag] ?? []).findIndex((s) => s.heim === teamId || s.gast === teamId);
+  return spieleAmTag(liga, tag).findIndex((s) => s.heim === teamId || s.gast === teamId);
 }

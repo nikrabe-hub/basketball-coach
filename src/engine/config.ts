@@ -69,7 +69,7 @@ const E = (teil: Partial<Effekt>): Effekt => ({ ...NEUTRAL, ...teil });
 
 export const CONFIG = {
   /** Version des Spielstand-Formats. Bei jeder Änderung erhöhen + Migration schreiben. */
-  saveVersion: 4,
+  saveVersion: 5,
 
   /** Anzahl Speicherplätze */
   saveSlots: 3,
@@ -238,7 +238,9 @@ export const CONFIG = {
       /** Wertung pro Minute, die ein Spieler hinter seiner Ziel-Spielzeit liegt */
       defizitProMinute: 6,
       /** Standard-Minuten (automatische Rotation) nach Rang der einsatzbereiten Spieler; wird auf 240 normiert */
-      standardMinuten: [39, 36, 33, 30, 28, 23, 18, 13, 9, 6, 3] as readonly number[],
+      /** In den Playoffs spielen die Stars mehr (Summe wird auf 240 umgerechnet) */
+    standardMinutenPlayoffs: [41, 38, 35, 31, 27, 21, 15, 10, 6, 2, 0],
+    standardMinuten: [39, 36, 33, 30, 28, 23, 18, 13, 9, 6, 3] as readonly number[],
       /** Beim Start der zweiten Halbzeit bevorzugte Starter (Bonus auf die Wertung) */
       starterNachHalbzeit: 40,
       /** Spieler ohne Ziel-Minuten, die nur im Notfall spielen (zu wenige Spieler mit Minuten) */
@@ -408,6 +410,41 @@ export const CONFIG = {
     bonusProPunkt: 0.04,
     bonusAb: 80,
     malusUnter: 50,
+  },
+
+  /** Wahl der Auszeichnungen (Meilenstein 4b) */
+  awards: {
+    /** Mindestanteil der Hauptrundenspiele, den ein Spieler absolviert haben muss */
+    mindestSpieleAnteil: 0.6,
+    /** MVP: Bonus (in Punkten pro Spiel) für Teams über .500, pro 100 % Siegquote-Abstand zu 50 % */
+    mvpTeamErfolg: 16,
+    /** Bester Verteidiger: Gewichte (Steals, Blocks, def. Rebounds) und Teamabwehr pro Punkt unter dem Ligaschnitt */
+    dpoy: { steal: 2.4, block: 2.2, reboundDef: 0.5, teamAbwehr: 0.5, attribut: 0.18 },
+    /** Sechster Mann: höchstens so viel Anteil an Einsätzen als Starter */
+    sechsterMannMaxStartAnteil: 0.2,
+    sechsterMannMinMinuten: 14,
+    /** Rookie: Mindestanteil der Spiele (niedriger, da Rookies später ins Team kommen) */
+    rookieMindestSpieleAnteil: 0.4,
+  },
+
+  /** Besitzer-Ziele, Jobsicherheit und Coach-Ruf (Meilenstein 4b; Entlassung folgt in Meilenstein 6) */
+  karriere: {
+    /** Erwartete Siegquote nach Stärke-Rang: 0,5 + (15,5 - Rang) * dieser Wert */
+    erwartungProRang: 0.0165,
+    /** Besitzer-Typ verschiebt die Erwartung (Siegquote) */
+    erwartungNachBesitzer: { geduldig: -0.03, ungeduldig: 0.02, sparsam: -0.01, siegen: 0.03 } as const,
+    /** Jobsicherheit: Änderung pro erfülltem / verfehltem Ziel (je nach Besitzer) */
+    zielErfuellt: { geduldig: 6, ungeduldig: 9, sparsam: 7, siegen: 9 } as const,
+    zielVerfehlt: { geduldig: -7, ungeduldig: -16, sparsam: -12, siegen: -14 } as const,
+    /** Jobsicherheit: Bonus pro gewonnener Playoff-Runde, für den Titel und pro 100 % Siegquote über 50 % */
+    rundeBonus: 2,
+    titelBonus: 8,
+    siegquoteFaktor: 20,
+    /** Ruf: pro gewonnener Playoff-Runde, Titel, Trainerpreis und pro 100 % Siegquote über 50 % */
+    rufRunde: 1.5,
+    rufTitel: 6,
+    rufTrainer: 4,
+    rufSiegquote: 24,
   },
 } as const;
 

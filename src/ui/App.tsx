@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { sichereSaisonZiele } from '../engine/karriere';
 import { generiereLiga } from '../engine/league';
 import { neuerSeed } from '../engine/rng';
 import { teamName } from '../engine/teams';
@@ -6,7 +7,9 @@ import { neuesSpiel, type Liga, type SpielDaten } from '../engine/types';
 import { saveStore } from '../store/saves';
 import type { SlotInfo } from '../store/types';
 import { BoxscoreView } from './BoxscoreView';
+import { spielKontext } from '../engine/postseason';
 import { Dialog } from './Dialog';
+import { SerieView } from './SerieView';
 import { lesbareTextfarbe } from './format';
 import { GameScreen } from './GameScreen';
 import { useNav } from './nav';
@@ -100,6 +103,7 @@ export function App() {
     if (!entwurf) return;
     try {
       const daten = neuesSpiel(entwurf.coachName, entwurf.coachAlter, entwurf.seed, entwurf.liga, teamId);
+      sichereSaisonZiele(daten);
       const rec = await saveStore.neu(entwurf.slot, daten);
       setAktiverSlot(entwurf.slot);
       setSpiel(rec.daten);
@@ -168,6 +172,7 @@ export function App() {
         onTeam={ansehenTeam}
         onSpieler={ansehenSpieler}
         onBox={(tag, index) => gehe({ dialog: { typ: 'box', tag, index } })}
+        onSerie={(serieId) => gehe({ dialog: { typ: 'serie', serieId } })}
       />
     );
   } else if (nav.screen === 'teamwahl' && entwurf) {
@@ -232,6 +237,17 @@ export function App() {
             erg={liga.ergebnisse[dialog.tag]![dialog.index]!}
             saison={spiel.saison}
             onSpieler={ansehenSpieler}
+            kontext={spielKontext(liga, dialog.tag, dialog.index)}
+          />
+        </Dialog>
+      )}
+
+      {dialog?.typ === 'serie' && liga?.postseason?.serien[dialog.serieId] && (
+        <Dialog titel="Serie" onSchliessen={schliesseDialog} gross>
+          <SerieView
+            liga={liga}
+            serie={liga.postseason.serien[dialog.serieId]!}
+            onBox={(tag, index) => gehe({ dialog: { typ: 'box', tag, index } })}
           />
         </Dialog>
       )}
