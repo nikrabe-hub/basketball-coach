@@ -8,7 +8,7 @@ import { erzeugeTeams } from './teams';
 import { POSITIONEN, type Liga, type Position, type Spieler, type Team } from './types';
 
 /** Gehalt in Dollar, das ein Spieler dieser OVR "wert" ist (vor der Skalierung auf das Teambudget). */
-function gehaltFuerOvr(ovr: number): number {
+export function gehaltFuerOvr(ovr: number): number {
   const g = CONFIG.generator;
   const { mindestGehalt, maximalGehalt } = CONFIG.finanzen;
   const anteil = begrenze((ovr - g.gehaltOvrMin) / (g.gehaltOvrMax - g.gehaltOvrMin), 0, 1);
@@ -80,7 +80,19 @@ export function generiereLiga(seed: number, saisonLaenge: number): Liga {
   }
 
   const spielplan = erzeugeSpielplan(rng, teams, saisonLaenge);
-  return { seed, saisonLaenge, teams, spieler, spielplan, tag: 0, ergebnisse: [], stand: leererStand(teams.length) };
+  return {
+    seed,
+    saisonLaenge,
+    teams,
+    spieler,
+    spielplan,
+    tag: 0,
+    ergebnisse: [],
+    stand: leererStand(teams.length),
+    picks: [],
+    draftKlasse: [],
+    drafts: [],
+  };
 }
 
 // ---------- Auswertungen (nur lesen, nichts verändern) ----------
@@ -137,4 +149,10 @@ export function erwartung(rang: number): string {
   if (rang <= 16) return 'Playoffs erreichen';
   if (rang <= 24) return 'Play-In-Plätze anpeilen';
   return 'Junge Spieler entwickeln – wenig Druck';
+}
+
+/** Sortiert den Kader eines Teams nach OVR (beste zuerst); bei gleicher OVR entscheidet die ID. */
+export function sortiereKader(liga: Liga, teamId: number): void {
+  const team = liga.teams[teamId] as Team;
+  team.kader.sort((a, b) => (liga.spieler[b] as Spieler).ovr - (liga.spieler[a] as Spieler).ovr || a - b);
 }

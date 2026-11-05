@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { sichereDraftDaten } from '../engine/draft';
 import { sichereSaisonZiele } from '../engine/karriere';
 import { generiereLiga } from '../engine/league';
 import { neuerSeed } from '../engine/rng';
@@ -15,9 +16,15 @@ import { GameScreen } from './GameScreen';
 import { useNav } from './nav';
 import { NewGameDialog } from './NewGameDialog';
 import { PlayerCard } from './PlayerCard';
+import { ProspektView } from './ProspektView';
 import { SlotScreen } from './SlotScreen';
 import { TeamPicker } from './TeamPicker';
 import { TeamView } from './TeamView';
+
+/** Kandidat des laufenden Drafts, der noch kein Team hat (nur Spannen sichtbar). */
+function istKandidat(spiel: SpielDaten, id: number): boolean {
+  return spiel.liga.draftKlasse.includes(id) && spiel.liga.spieler[id]?.teamId === null;
+}
 
 function fehlerText(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
@@ -104,6 +111,7 @@ export function App() {
     try {
       const daten = neuesSpiel(entwurf.coachName, entwurf.coachAlter, entwurf.seed, entwurf.liga, teamId);
       sichereSaisonZiele(daten);
+      sichereDraftDaten(daten);
       const rec = await saveStore.neu(entwurf.slot, daten);
       setAktiverSlot(entwurf.slot);
       setSpiel(rec.daten);
@@ -252,7 +260,13 @@ export function App() {
         </Dialog>
       )}
 
-      {dialog?.typ === 'spieler' && liga?.spieler[dialog.spielerId] && (
+      {dialog?.typ === 'spieler' && liga?.spieler[dialog.spielerId] && spiel && istKandidat(spiel, dialog.spielerId) && (
+        <Dialog titel="Draft-Kandidat" onSchliessen={schliesseDialog} gross>
+          <ProspektView spiel={spiel} spielerId={dialog.spielerId} onAendern={aendereSpiel} onSchliessen={schliesseDialog} />
+        </Dialog>
+      )}
+
+      {dialog?.typ === 'spieler' && liga?.spieler[dialog.spielerId] && !(spiel && istKandidat(spiel, dialog.spielerId)) && (
         <Dialog titel="Spielerkarte" onSchliessen={schliesseDialog} gross>
           <PlayerCard spieler={liga.spieler[dialog.spielerId]!} liga={liga} />
         </Dialog>

@@ -8,8 +8,9 @@ Entscheidungen, offene Punkte und bekannte Bugs. Bei neuen Sitzungen zuerst lese
 - **Meilenstein 2 (Liga-Generator): fertig und auf dem Handy abgenommen** (Saisonlänge, Teamwahl, Kader, Tabellen ok).
 - **Meilenstein 3 (Spiel-Engine): fertig und auf dem Handy abgenommen.**
 - **Meilenstein 4a (Coaching): fertig und auf dem Handy abgenommen** (läuft flüssig bis zum Saisonende).
-- **Meilenstein 4b (Play-In, Playoffs, Awards, Ziele): Code fertig, in der Cloud getestet.** Wartet auf den Handy-Test (Checkliste unten). Spielstand-Format jetzt 5.
-- Nächster Schritt: Meilenstein 5 (Offseason: Draft, Verträge, Free Agency, Spielerentwicklung, **neue Saison**). Vorher kurzer Plan und OK abwarten. Bis dahin endet das Spiel nach den Finals ("Saison beendet").
+- **Meilenstein 4b (Play-In, Playoffs, Awards, Ziele): fertig und auf dem Handy abgenommen.**
+- **Meilenstein 5a (Entwicklung, Karriereende, Lotterie, Draft mit Scouting, Saisonwechsel): Code fertig, in der Cloud getestet** (129 Unit-Tests, Browser-Test, 20-Saisons-Simulation). Wartet auf den Handy-Test (Checkliste unten). Spielstand-Format jetzt 6.
+- Nächster Schritt: Meilenstein 5b (Verträge, Re-Signing, Free Agency, Gehaltsobergrenze/Luxussteuer). Vorher kurzer Plan und OK abwarten. Bis dahin werden auslaufende Verträge vorläufig automatisch verlängert.
 - Offene Frage: Das GitHub-Repo ist noch öffentlich, obwohl privat gewünscht war (GitHub -> Settings -> Danger Zone -> Change visibility).
 
 ## Entscheidungen
@@ -67,6 +68,40 @@ Entscheidungen, offene Punkte und bekannte Bugs. Bei neuen Sitzungen zuerst lese
 - Gilt nur für **neue Spiele**. Bestehende Spielstände behalten ihre alten Namen (Boxscores und Spielstand-Liste speichern Namen als Text).
 - Folge: gleicher Seed erzeugt jetzt eine andere Liga als vorher.
 
+## Meilenstein 5a: Offseason, Draft, Entwicklung (Entscheidungen)
+
+- **Ablauf nach den Finals (Start-Tab, Karte "Offseason"):** Offseason starten -> Bericht (Karriereende, Entwicklung) -> Lotterie -> Draft (Liga -> Draft) -> Kader (max. 15) -> Saison N+1 starten. Der Zustand steckt in `liga.offseason`; `offseasonStatus()` leitet ihn ab.
+- **Entwicklung:** Alter +1. Junge Spieler (19–26) wachsen um einen Anteil der Lücke OVR -> POT (Tabelle `CONFIG.offseason.entwicklung`), beeinflusst von Arbeitsethik und Spielzeit. Ab 27 baut man ab (Tabelle `abbau`). 6 % Überraschungen. Ziel-OVR höchstens POT + 2.
+- **Karriereende:** Chance ab 33, mit 41 sicher. Schwache Free Agents ab 31 hören schneller auf. Der Free-Agent-Pool wird auf 60 begrenzt. Beendete Spieler bleiben in `liga.spieler` (mit `ruhestand`), damit IDs stabil bleiben.
+- **Lotterie (NBA-ähnlich):** Die 14 Teams ohne Playoffs losen die Picks 1–4 aus (Chancen nach Bilanz), der Rest folgt nach Bilanz. Die Playoff-Teams folgen nach Erfolg.
+- **Draft:** 100 Kandidaten pro Jahr (OVR höchstens 64, Alter 19–23, POT mit steiler Kurve: wenige Stars), 2 Runden x 30 Picks. Rookie-Gehalt nach Pick (10,5 Mio. bei Pick 1 bis 2,3 Mio. bei Pick 30, 3 Jahre; 2. Runde Mindestgehalt, 2 Jahre). KI-Teams wählen nach Wert (OVR/POT, je nach Alter) plus Bedarf plus Zufall. Eigene Picks wählst du von Hand oder mit "Auto-Pick" / "Rest automatisch". Picks sind 4 Jahre im Voraus angelegt (Handel kommt in M6).
+- **Scouting:** Kandidaten zeigen nur Spannen (OVR, POT, jedes Attribut). Der wahre Wert liegt immer darin. 100 Scouting-Punkte pro Saison; Stufe 1/2/3 kostet 15/30/50 Punkte (pro Spieler) und macht die Spannen enger (Faktor 0,6/0,3/0,1). Persönlichkeit bleibt bis zur Verpflichtung verborgen.
+- **Verträge sind in 5a vorläufig:** Nach dem Draft zählen die Vertragsjahre herunter (Draftees dieses Jahres ausgenommen). Auslaufende Verträge werden automatisch zum Marktwert um 1–3 Jahre verlängert. KI-Teams entlassen auf 15 und füllen auf 13 aus dem Free-Agent-Pool zum Mindestgehalt. Du musst selbst auf höchstens 15 Spieler kommen (Entlassen-Knopf, zweimal tippen). Unter 13 füllt das Spiel automatisch auf (mit Nachricht). In 5b ersetzt echte Vertragsverhandlung/Free Agency diese Automatik.
+- **Neue Saison:** Neuer Spielplan, Tabelle zurück, Rotation wieder auf Automatik (mit Nachricht, falls sie vorher eigen war), Scouting zurück auf 100 Punkte, neue Draft-Klasse, neue Ziele. Saisonwerte werden in `spieler.verlauf` archiviert (Karriere-Tabelle auf der Spielerkarte).
+- **Spielstand-Format 6** (Migration 5 -> 6 legt Picks, Draft-Klasse, Scouting an).
+- Neues Skript: `npm run seasons [-- Saisons Länge Seed]` simuliert mehrere Saisons am Stück und prüft Kader, Wertebereiche und Dynastien.
+
+## Geprüft (Meilenstein 5a, Cloud)
+
+- 129 Unit-Tests grün (u. a. Entwicklung, Lotterie, Draft, Scouting-Spannen, Saisonwechsel, Migration).
+- `npm run seasons` (20 Saisons à 29 Spiele, ca. 22 s): Liga bleibt stabil, Top-10-OVR steigt in den ersten ca. 10 Saisons um etwa +6 und bleibt dann auf einem Plateau (weil die Ersatzbank am Anfang schwach ist). Punkte/Wurfquoten bleiben stabil. Kader immer 13–15, kein Team über 30 % der Titel.
+- Browser-Test (Playwright, Handy-Format): kompletter Ablauf Offseason starten -> Lotterie -> Draft (Scouten, eigener Pick von Hand, Rest automatisch) -> Entlassen -> Saison 2 -> Neuladen. Keine Konsolenfehler.
+
+## Checkliste Handy-Test (Meilenstein 5a)
+
+1. Neue APK über die alte installieren. Ein alter Spielstand (auch am Saisonende) muss sich laden lassen.
+2. Spiel bis zum Saisonende simulieren. Start-Tab zeigt "Saison beendet" und darunter "Offseason starten".
+3. Offseason starten (Sekunden notieren). Bericht: Deine Spieler (alt -> neu), größte Sprünge der Liga, Karriereende. Sind die Veränderungen plausibel? Jung wird besser, alt wird schlechter?
+4. "Weiter zur Draft-Lotterie": 14 Teams mit Chancen und gezogenen Picks. Lies dein Ergebnis.
+5. "Draft beginnen" -> Liga -> Draft. Kandidaten sortieren (Spaltenkopf), einen antippen: Spannen statt Zahlen. "Genauer ansehen" macht die Spannen enger und kostet Punkte.
+6. Wenn du dran bist: Kandidat antippen -> "Diesen Spieler draften". Danach laufen die KI-Picks bis zu deinem nächsten Pick. Alternativ "Auto-Pick" / "Rest automatisch".
+7. Liga -> Draft -> "Letzter Draft" zeigt alle 60 Picks.
+8. Start-Tab, Kader-Phase: Kaderliste, Entlassen (zweimal tippen). Bei mehr als 15 Spielern ist der Start der neuen Saison gesperrt.
+9. "Saison 2 starten" (Sekunden notieren). Neuer Spielplan, Tabelle bei 0–0, Team-Tab mit älteren Spielern, deine Draftees dabei.
+10. Spielerkarte: Block "Draft" bei Rookies, "Karriere" mit der Vorsaison.
+11. App schließen und neu öffnen mitten in der Offseason (z. B. im Draft): Zustand bleibt erhalten.
+12. Mehr als eine Saison durchspielen, wenn möglich: Fühlt sich die Liga stabil an? Gibt es zu viele/zu wenige Stars?
+
 ## Geprüft (Meilenstein 4b)
 
 - `npm test`: 114 Tests grün (Tiebreaker, Play-In, Bracket, Heimrecht, Serienende, Ziele, Awards, Migration 4->5, Simulation in Etappen).
@@ -89,12 +124,12 @@ Entscheidungen, offene Punkte und bekannte Bugs. Bei neuen Sitzungen zuerst lese
 
 ## Noch NICHT geprüft
 
-- M4b auf dem echten Handy (Checkliste unten), v. a. Gesamtdauer Hauptrunde + Playoffs und Lesbarkeit des Tableaus.
+- M5a auf dem echten Handy (Checkliste oben), v. a. Dauer von "Offseason starten" und "Saison 2 starten".
 
 - Verhalten auf dem echten Handy: Geschwindigkeit der Simulation, Web Worker in der APK, Wischen der breiten Tabellen, Zurück-Taste während der Simulation.
 - Spielstände aus Meilenstein 2 auf dem Handy: werden beim Laden auf Format 3 gehoben (nur per Unit-Test geprüft).
 
-## Checkliste Handy-Test (Meilenstein 4b)
+## Checkliste Handy-Test (Meilenstein 4b, erledigt)
 
 1. Neue APK über die alte installieren. Ein alter Spielstand (Format 4, auch mitten in der Saison oder am Saisonende) muss sich laden lassen. Ist die Hauptrunde schon vorbei, entsteht direkt das Play-In.
 2. Start-Tab: "Ziele & Jobsicherheit" zeigt Besitzer-Typ, Ziele (○ offen), Jobsicherheit und Ruf. Sind die Ziele für dein Team realistisch?
@@ -138,6 +173,10 @@ Entscheidungen, offene Punkte und bekannte Bugs. Bei neuen Sitzungen zuerst lese
 - Play-In-/Playoff-Spiele haben (noch) keine eigene Statistik-Tabelle; Spielerstatistik im Liga-Tab gilt nur für die Hauptrunde.
 - Passung der Angriffs-Taktiken zum Kader ist schwach (siehe M4a Entscheidungen); bei Bedarf stärker machen.
 - Editor für Team- und Spielernamen (Brief: "optional später").
+- **5b (Plan):** Verträge, Re-Signing-Verhandlung, Free Agency in Tagen, Gehaltsobergrenze/Luxussteuer/Min-/Max-Gehalt, Rookie-Skala als Regel, Optionen, Dead Cap bei Entlassung (heute ohne Folgen), 20-Saisons-Lauf.
+- Ligaentwicklung: Top-10-OVR steigt in den ersten ca. 10 Saisons um ca. +6 und bleibt dann stabil (siehe 5a). Free-Agent-Pool ca. 150 Spieler.
+- Dateigröße: nach 20 Saisons ca. 2500 Spieler im Spielstand (beendete Karrieren bleiben gespeichert). Leistung bei 20+ Saisons gehört zu Meilenstein 7.
+- Draft-Ansicht und Offseason-Texte sind Platzhalter-Design; Feinschliff in M7.
 
 ## Bekannte Bugs
 

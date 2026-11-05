@@ -69,7 +69,7 @@ const E = (teil: Partial<Effekt>): Effekt => ({ ...NEUTRAL, ...teil });
 
 export const CONFIG = {
   /** Version des Spielstand-Formats. Bei jeder Änderung erhöhen + Migration schreiben. */
-  saveVersion: 5,
+  saveVersion: 6,
 
   /** Anzahl Speicherplätze */
   saveSlots: 3,
@@ -353,6 +353,99 @@ export const CONFIG = {
     /** Verletzungen je Team und Saison (alle / nur schwere ab 10 Spielen Ausfall) */
     verletzungenProTeamUndSaison: { min: 3, max: 8 },
     schwereVerletzungenProTeamUndSaison: { min: 0.4, max: 1.6 },
+  },
+
+  /** Offseason (Meilenstein 5a): Karriereende, Entwicklung, Draft, Scouting. Startwerte, werden mit dem 20-Saisons-Skript abgestimmt. */
+  offseason: {
+    kader: { min: 13, max: 15 },
+    karriereende: {
+      /** Ab diesem Alter (am Saisonende) kann ein Spieler aufhören */
+      abAlter: 33,
+      /** Chance mit 33, plus `proJahr` für jedes weitere Jahr */
+      grundChance: 0.1,
+      proJahr: 0.1,
+      /** Pro OVR-Punkt unter 60 steigt die Chance, pro Punkt über 75 sinkt sie */
+      ovrFaktor: 0.01,
+      starBonus: 0.15,
+      /** Mit diesem Alter hören alle auf */
+      pflichtAlter: 41,
+      /** Spieler ohne Team: ab diesem Alter und unter dieser OVR hören sie meist auf */
+      freeAgentAlter: 31,
+      freeAgentOvr: 50,
+      freeAgentChance: 0.6,
+      /** Mehr als so viele Spieler ohne Team bleiben nicht im Pool (die Schwächsten hören auf) */
+      poolMax: 60,
+    },
+    entwicklung: {
+      /** Junge Spieler (Alter -> Anteil der Lücke zum Potenzial, den sie in einem Jahr schließen) */
+      lueckeAnteil: { 19: 0.3, 20: 0.3, 21: 0.28, 22: 0.24, 23: 0.18, 24: 0.12, 25: 0.07, 26: 0.04 } as Record<number, number>,
+      /** Ab 27: erwartete OVR-Änderung pro Jahr (ab 36 gilt der letzte Wert) */
+      abbau: [-0.1, -0.4, -0.8, -1.3, -1.9, -2.5, -3.1, -3.7, -4.3, -4.8] as readonly number[],
+      abbauStartAlter: 27,
+      /** Zufall pro Jahr (Standardabweichung in OVR-Punkten) */
+      rauschen: 1.6,
+      ueberraschungChance: 0.06,
+      ueberraschungMittel: 4,
+      /** Arbeitsethik 99 / 20 verändert das Wachstum um bis zu +/- diesen Anteil */
+      arbeitsethikEinfluss: 0.25,
+      /** Spielzeit (Minuten pro Spiel): wer viel spielt, wächst schneller, wer kaum spielt, langsamer */
+      spielzeitViel: 24,
+      spielzeitWenig: 8,
+      spielzeitBonus: 0.12,
+      spielzeitMalus: 0.18,
+      /** Einzelne Attribute streuen um die Gesamtänderung */
+      attributRauschen: 1.3,
+      /** Wie stark ein Attribut beim Abbau mitgeht (1 = wie die Gesamtwertung) */
+      abbauAttribut: {
+        speed: 1.7, sprungkraft: 1.7, ausdauer: 1.3, kraft: 0.9, ballhandling: 0.9, dunk: 1.2,
+        dreier: 0.6, mitteldistanz: 0.6, freiwurf: 0.4, spielIq: 0.3, passen: 0.5,
+        postMoves: 0.8, reboundOff: 1.0, reboundDef: 0.9, block: 1.1,
+        perimeterDef: 1.2, innenDef: 0.9, steal: 1.2,
+      } as Record<string, number>,
+      /** Ab diesem Alter wachsen Athletik-Attribute kaum noch */
+      athletikWachstumBis: 24,
+      /** Potenzial schwankt bis zu diesem Alter noch um +/- (Standardabweichung) */
+      potSchwankungBis: 25,
+      potSchwankung: 1.5,
+    },
+    draft: {
+      kandidaten: 100,
+      runden: 2,
+      picksProRunde: 30,
+      lotterieTeams: 14,
+      /** Chance auf Pick 1 in Prozent, schlechtestes Team zuerst (wie NBA seit 2019) */
+      lotterieChancen: [14, 14, 14, 12.5, 10.5, 9, 7.5, 6, 4.5, 3, 2, 1.5, 1, 0.5] as readonly number[],
+      /** So viele Picks werden gelost, der Rest folgt nach Bilanz */
+      lotterieZiehungen: 4,
+      kandidat: {
+        /** Potenzial nach Rang r (0 = bester): potBasis + potSpanne * exp(-r / potTau), plus Zufall */
+        potBasis: 48,
+        potSpanne: 36,
+        potTau: 20,
+        potStreuung: 3.5,
+        /** Obergrenze für die OVR eines Kandidaten (auch die Besten sind noch keine Stars) */
+        ovrMax: 64,
+        /** Alter der Kandidaten (19–23): Gewichte für die besten 10 und für alle anderen */
+        alterGewichteTop: [45, 35, 15, 5, 0] as readonly number[],
+        alterGewichte: [30, 28, 22, 14, 6] as readonly number[],
+        /** Lücke OVR -> POT je Alter 19–23: [Mittel, Streuung] */
+        luecke: [[17, 5], [13, 4.5], [9, 4], [6, 3.5], [3.5, 2.5]] as readonly (readonly [number, number])[],
+        potMax: 92,
+      },
+      /** KI: Streuung der Bewertung und Bonus für eine dünn besetzte Position */
+      ki: { rauschen: 3, bedarfBonus: 2 },
+      /** Rookie-Gehälter nach Pick (Runde 1: geometrisch von Pick 1 zu Pick 30) und Laufzeit */
+      rookie: { pick1: 10_500_000, pick30: 2_300_000, jahreRunde1: 3, jahreRunde2: 2 },
+    },
+    scouting: {
+      punkteProSaison: 100,
+      /** Gesamtkosten für Stufe 0–3 */
+      kosten: [0, 15, 30, 50] as readonly number[],
+      /** Wie breit die Spanne bei Stufe 0–3 im Vergleich zum Start ist */
+      breite: [1, 0.6, 0.3, 0.1] as readonly number[],
+      /** Halbe Breite der Spanne bei Stufe 0 */
+      startBreite: { ovr: 8, pot: 12, attribut: 10 },
+    },
   },
 
   finanzen: {

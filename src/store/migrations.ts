@@ -1,4 +1,5 @@
 import { CONFIG } from '../engine/config';
+import { sichereDraftDaten } from '../engine/draft';
 import { sichereSaisonZiele } from '../engine/karriere';
 import { generiereLiga } from '../engine/league';
 import { erzeugePostseason } from '../engine/postseason';
@@ -103,6 +104,20 @@ export const MIGRATIONEN: Record<number, Migration> = {
     sichereSaisonZiele(daten);
     if (hauptrundeVorbei(daten.liga) && !daten.liga.postseason) erzeugePostseason(daten);
     return { ...record, version: 5, daten };
+  },
+
+  /**
+   * Format 5 -> 6 (Meilenstein 5a): Draft-Picks, Draft-Klasse, Scouting.
+   * Spielstände mitten in der Saison oder nach den Finals lassen sich normal weiterspielen.
+   */
+  5: (record) => {
+    const daten = record.daten as SpielDaten;
+    daten.liga.picks ??= [];
+    daten.liga.draftKlasse ??= [];
+    daten.liga.drafts ??= [];
+    daten.scouting ??= { punkte: CONFIG.offseason.scouting.punkteProSaison, stufen: {} };
+    sichereDraftDaten(daten);
+    return { ...record, version: 6, daten };
   },
 };
 

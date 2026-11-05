@@ -65,7 +65,17 @@ export function PlayerCard({ spieler: s, liga }: Props) {
         </p>
       </div>
 
+      {s.draft && (
+        <div className="sk-block">
+          <h3>Draft</h3>
+          <p>
+            Saison {s.draft.saison} · Runde {s.draft.runde}, Pick {s.draft.pick}
+          </p>
+        </div>
+      )}
+
       <StatistikBlock spieler={s} liga={liga} />
+      <VerlaufBlock spieler={s} liga={liga} />
 
       {ATTRIBUT_GRUPPEN.map((gruppe) => (
         <div className="sk-block" key={gruppe}>
@@ -93,7 +103,49 @@ export function PlayerCard({ spieler: s, liga }: Props) {
             <span>{wertWort(s.persoenlichkeit[p.key])}</span>
           </div>
         ))}
-        <p className="hinweis">Aktionen wie Trade, Vertragsverlängerung und Entlassung kommen in späteren Meilensteinen.</p>
+        <p className="hinweis">Trade und Vertragsverlängerung kommen in späteren Meilensteinen.</p>
+      </div>
+    </div>
+  );
+}
+
+/** Karriere: archivierte Saisons (Hauptrunde), ab der zweiten Saison. */
+function VerlaufBlock({ spieler, liga }: { spieler: Spieler; liga: Liga }) {
+  const zeilen = spieler.verlauf ?? [];
+  if (zeilen.length === 0) return null;
+  const pro = (summe: number, spiele: number) => (spiele > 0 ? fmt1(summe / spiele) : '–');
+  return (
+    <div className="sk-block">
+      <h3>Karriere (Hauptrunde, pro Spiel)</h3>
+      <div className="verlauf-box">
+        <table className="verlauf">
+          <thead>
+            <tr>
+              <th>Saison</th>
+              <th>Team</th>
+              <th>Sp</th>
+              <th>Min</th>
+              <th>Pkt</th>
+              <th>Reb</th>
+              <th>Ast</th>
+              <th>OVR</th>
+            </tr>
+          </thead>
+          <tbody>
+            {zeilen.map((z) => (
+              <tr key={z[0]}>
+                <td>{z[0]}</td>
+                <td>{liga.teams[z[1]]?.kuerzel ?? '–'}</td>
+                <td>{z[2]}</td>
+                <td>{pro(z[3], z[2])}</td>
+                <td>{pro(z[4], z[2])}</td>
+                <td>{pro(z[5], z[2])}</td>
+                <td>{pro(z[6], z[2])}</td>
+                <td>{z[9]}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );

@@ -151,6 +151,11 @@ export interface ErzeugterName {
 export class NamenGenerator {
   private readonly benutzt = new Set<string>();
 
+  /** Merkt sich einen schon vergebenen Namen (für Spieler, die später dazukommen). */
+  registriere(vorname: string, nachname: string): void {
+    this.benutzt.add(normalisiere(`${vorname} ${nachname}`));
+  }
+
   erzeuge(rng: Rng): ErzeugterName {
     const gewichte = REGIONEN.map((r) => CONFIG.generator.regionGewichte[r]);
     for (let versuch = 0; versuch < 200; versuch++) {

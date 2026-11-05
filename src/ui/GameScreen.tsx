@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { CONFIG } from '../engine/config';
 import { gehaltSumme, staerkeRang, teamStaerke } from '../engine/league';
 import { verletzungText } from '../engine/injuries';
+import { offseasonStatus } from '../engine/offseason';
 import { RUNDEN_NAMEN } from '../engine/postseason';
 import { formatDatum, spieleVonTeam } from '../engine/schedule';
 import {
@@ -23,6 +24,8 @@ import { ErgebnisseView } from './ErgebnisseView';
 import { fmtGeld } from './format';
 import { AwardsView } from './AwardsView';
 import { KaderTabelle } from './KaderTabelle';
+import { DraftView } from './DraftView';
+import { OffseasonKarte } from './OffseasonKarte';
 import { PlayoffsView } from './PlayoffsView';
 import { PostseasonKarte, ZielKarte } from './SaisonKarten';
 import { RotationView } from './RotationView';
@@ -126,7 +129,7 @@ export function GameScreen({ slot, spiel, tab, onTab, onAendern, onZuDenSlots, o
             onAnsicht={setTeamAnsicht}
           />
         )}
-        {tab === 'liga' && <LigaTab spiel={spiel} onTeam={onTeam} onSpieler={onSpieler} onBox={onBox} onSerie={onSerie} />}
+        {tab === 'liga' && <LigaTab spiel={spiel} onAendern={onAendern} onTeam={onTeam} onSpieler={onSpieler} onBox={onBox} onSerie={onSerie} />}
         {tab === 'buero' && (
           <Platzhalter
             titel="Büro"
@@ -168,7 +171,10 @@ function phasenText(spiel: SpielDaten): string {
   const post = liga.postseason;
   if (!hauptrundeVorbei(liga)) return formatDatum(spiel.saison, liga.tag);
   if (!post) return 'Hauptrunde beendet';
-  if (post.phase === 'beendet') return 'Saison beendet';
+  if (post.phase === 'beendet') {
+    const st = offseasonStatus(spiel);
+    return st === 'start' ? 'Saison beendet' : 'Offseason';
+  }
   return post.phase === 'playin' ? 'Play-In' : `Playoffs · ${RUNDEN_NAMEN[post.runde]}`;
 }
 
@@ -289,7 +295,10 @@ function StartTab({
       </section>
 
       {vorbei ? (
-        <PostseasonKarte spiel={spiel} onSimuliere={onSimuliere} laeuft={laeuft} fehler={fehler} onTab={onTab} />
+        <>
+          <PostseasonKarte spiel={spiel} onSimuliere={onSimuliere} laeuft={laeuft} fehler={fehler} onTab={onTab} />
+          <OffseasonKarte spiel={spiel} onAendern={onAendern} onSpieler={onSpieler} onTab={onTab} />
+        </>
       ) : (
       <section className="karte">
         <h2>Nächstes Spiel</h2>
@@ -526,11 +535,12 @@ function Posteingang({
 
 // ---------- Liga ----------
 
-type LigaAnsicht = 'tabelle' | 'playoffs' | 'awards' | 'ergebnisse' | 'statistik' | 'teams' | 'spielplan';
+type LigaAnsicht = 'tabelle' | 'playoffs' | 'awards' | 'draft' | 'ergebnisse' | 'statistik' | 'teams' | 'spielplan';
 const LIGA_ANSICHTEN: { id: LigaAnsicht; label: string }[] = [
   { id: 'tabelle', label: 'Tabelle' },
   { id: 'playoffs', label: 'Playoffs' },
   { id: 'awards', label: 'Awards' },
+  { id: 'draft', label: 'Draft' },
   { id: 'ergebnisse', label: 'Ergebnisse' },
   { id: 'statistik', label: 'Statistik' },
   { id: 'teams', label: 'Teams' },
@@ -539,19 +549,24 @@ const LIGA_ANSICHTEN: { id: LigaAnsicht; label: string }[] = [
 
 function LigaTab({
   spiel,
+  onAendern,
   onTeam,
   onSpieler,
   onBox,
   onSerie,
 }: {
   spiel: SpielDaten;
+  onAendern: (neu: SpielDaten) => Promise<void>;
   onTeam: (id: number) => void;
   onSpieler: (id: number) => void;
   onBox: (tag: number, index: number) => void;
   onSerie: (serieId: number) => void;
 }) {
   const nachseason = spiel.liga.postseason !== undefined && spiel.liga.postseason.phase !== 'beendet';
-  const [ansicht, setAnsicht] = useState<LigaAnsicht>(nachseason ? 'playoffs' : 'tabelle');
+  const offStatus = offseasonStatus(spiel);
+  const [ansicht, setAnsicht] = useState<LigaAnsicht>(
+    offStatus === 'lotterie' || offStatus === 'draft' ? 'draft' : nachseason ? 'playoffs' : 'tabelle',
+  );
   return (
     <>
       <h1>Liga</h1>
@@ -571,6 +586,7 @@ function LigaTab({
       {ansicht === 'tabelle' && <TabelleView liga={spiel.liga} userTeamId={spiel.userTeamId} onTeam={onTeam} />}
       {ansicht === 'playoffs' && <PlayoffsView spiel={spiel} onSerie={onSerie} onBox={onBox} />}
       {ansicht === 'awards' && <AwardsView spiel={spiel} onSpieler={onSpieler} />}
+      {ansicht === 'draft' && <DraftView spiel={spiel} onAendern={onAendern} onSpieler={onSpieler} />}
       {ansicht === 'ergebnisse' && (
         <ErgebnisseView liga={spiel.liga} saison={spiel.saison} userTeamId={spiel.userTeamId} onBox={onBox} />
       )}

@@ -566,3 +566,46 @@ button.slot {
 .fortschritt-balken.gefahr { background: var(--schlecht); }
 @media (min-width: 640px) { .serien { grid-template-columns: 1fr 1fr; } }
 .award .textknopf { text-align: left; min-height: 36px; }
+
+/* ---------- Meilenstein 5a: Offseason, Draft, Scouting ---------- */
+
+.schritte { list-style: none; display: flex; gap: 6px; margin: 0 0 12px; padding: 0; }
+.schritte li { flex: 1; text-align: center; padding: 6px 2px; border-radius: 8px; background: var(--bg); border: 1px solid var(--rand); color: var(--text-leise); font-size: 0.72rem; }
+.schritte li.fertig { color: var(--gut); }
+.schritte li.aktiv { border-color: var(--akzent); color: var(--text); font-weight: 700; }
+
+.lotterie { display: flex; flex-direction: column; gap: 2px; margin-top: 8px; }
+.lotterie-zeile { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: center; padding: 8px 10px; border-radius: 8px; font-size: 0.88rem; }
+.lotterie-zeile:nth-child(odd) { background: var(--bg); }
+.lotterie-zeile.eigene { background: var(--bg-karte-hell); box-shadow: inset 3px 0 0 var(--akzent); }
+.lotterie-chance { color: var(--text-leise); font-size: 0.75rem; white-space: nowrap; }
+
+.kaderliste { display: flex; flex-direction: column; gap: 2px; margin-top: 8px; }
+.kaderzeile { display: grid; grid-template-columns: 1fr auto auto auto; gap: 10px; align-items: center; padding: 6px 8px; border-radius: 8px; font-size: 0.88rem; }
+.kaderzeile:nth-child(odd) { background: var(--bg); }
+.kaderzeile .textknopf { text-align: left; }
+
+.entw-zeile { display: grid; grid-template-columns: 1fr auto auto auto; gap: 10px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--rand); font-size: 0.88rem; }
+.entw-zeile:last-child { border-bottom: 0; }
+.entw-zeile .textknopf { text-align: left; }
+
+.pickzeile { display: grid; grid-template-columns: 2.2em 1fr auto; gap: 10px; align-items: center; width: 100%; padding: 9px 4px; border: 0; border-bottom: 1px solid var(--rand); background: none; color: inherit; font: inherit; text-align: left; font-size: 0.9rem; }
+.pickzeile:last-of-type { border-bottom: 0; }
+.pickzeile.klickbar { cursor: pointer; min-height: 44px; }
+.pickzeile.klickbar:active { background: var(--bg-karte-hell); }
+.pick-nr { color: var(--text-leise); font-variant-numeric: tabular-nums; text-align: right; }
+.pick-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.sk-ovr.klein { font-size: 1.25rem; white-space: nowrap; }
+.attr.spanne .attr-balken { position: relative; }
+.attr.spanne .attr-fuell { position: absolute; top: 0; }
+.attr.spanne .attr-wert { min-width: 4.6em; white-space: nowrap; }
+.attr.spanne { grid-template-columns: 9.5em 1fr 4.6em; }
+
+.verlauf-box { overflow-x: auto; }
+.verlauf { border-collapse: collapse; width: 100%; font-size: 0.82rem; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.verlauf th, .verlauf td { padding: 5px 6px; text-align: right; border-bottom: 1px solid var(--rand); }
+.verlauf th { color: var(--text-leise); font-size: 0.7rem; text-transform: uppercase; }
+.verlauf th:first-child, .verlauf td:first-child, .verlauf th:nth-child(2), .verlauf td:nth-child(2) { text-align: left; }
+.sk-block + .knopf.abstand, .knopf.abstand + .sk-block { margin-bottom: 10px; }
+.spielerkarte > .knopf.abstand { margin-bottom: 12px; }

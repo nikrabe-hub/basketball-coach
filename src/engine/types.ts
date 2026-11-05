@@ -3,6 +3,8 @@
  * damit sie direkt in IndexedDB gespeichert werden können.
  */
 
+import { CONFIG } from './config';
+
 export interface Coach {
   name: string;
   alter: number;
@@ -76,7 +78,31 @@ export interface Spieler {
   neuling: boolean;
   /** Gesamtwertung vor einem Jahr (ab Meilenstein 5, für "Most Improved"); fehlt in der ersten Saison */
   ovrVorjahr?: number;
+  /** Saison, nach der der Spieler seine Karriere beendet hat (ab Meilenstein 5); danach gehört er keinem Team mehr */
+  ruhestand?: number;
+  /** Draft-Jahr und Pick (ab Meilenstein 5); fehlt bei Spielern der Start-Liga und bei Undrafted */
+  draft?: { saison: number; runde: 1 | 2; pick: number };
+  /** Saisonwerte früherer Saisons (ab Meilenstein 5), älteste zuerst */
+  verlauf?: VerlaufZeile[];
 }
+
+/**
+ * Archivierte Saison eines Spielers (Hauptrunde): Saison, Team, Spiele, Minuten gesamt,
+ * Punkte, Rebounds, Assists, Steals, Blocks (jeweils Summen), OVR und Alter in dieser Saison.
+ */
+export type VerlaufZeile = [
+  saison: number,
+  teamId: number,
+  spiele: number,
+  minuten: number,
+  pts: number,
+  reb: number,
+  ast: number,
+  stl: number,
+  blk: number,
+  ovr: number,
+  alter: number,
+];
 
 /** Eine laufende Verletzung. Die Dauer zählt in Spielen des eigenen Teams. */
 export interface Verletzung {
@@ -246,6 +272,83 @@ export interface Liga {
   stand: Saisonstand;
   /** Play-In und Playoffs; entsteht, sobald die Hauptrunde gespielt ist (ab Meilenstein 4b) */
   postseason?: Postseason;
+  /** Alle noch nicht gezogenen Draft-Picks (laufendes Jahr und die 3 folgenden), ab Meilenstein 5 */
+  picks: DraftPick[];
+  /** Kandidaten (Spieler-IDs) des nächsten Drafts; solange sie nicht gedraftet sind, gehören sie keinem Team */
+  draftKlasse: number[];
+  /** Ergebnisse vergangener Drafts, älteste zuerst */
+  drafts: DraftErgebnis[];
+  /** Ablauf nach den Finals (Entwicklung, Lotterie, Draft, Kader), bis die neue Saison beginnt */
+  offseason?: Offseason;
+}
+
+// ---------- Offseason, Draft, Scouting (ab Meilenstein 5) ----------
+
+/** Ein Draft-Pick. `nr` (1–60) steht erst nach der Lotterie fest. */
+export interface DraftPick {
+  saison: number;
+  runde: 1 | 2;
+  /** Team, dem der Pick ursprünglich gehörte (bestimmt die Position) */
+  ursprung: number;
+  /** Team, das den Pick gerade besitzt */
+  besitzer: number;
+  nr: number | null;
+  spielerId: number | null;
+}
+
+export interface DraftErgebnis {
+  saison: number;
+  /** [Pick-Nummer, Team-ID, Spieler-ID] */
+  picks: [nr: number, teamId: number, spielerId: number][];
+}
+
+export interface EntwicklungsZeile {
+  spielerId: number;
+  /** Team am Ende der Saison (null = ohne Team) */
+  teamId: number | null;
+  alter: number;
+  ovrAlt: number;
+  ovrNeu: number;
+  potAlt: number;
+  potNeu: number;
+}
+
+export interface VertragsZeile {
+  spielerId: number;
+  gehaltAlt: number;
+  gehaltNeu: number;
+  jahre: number;
+}
+
+export type OffseasonPhase = 'bericht' | 'lotterie' | 'draft' | 'kader';
+
+export interface Lotterie {
+  /** Die 14 Teams ohne Playoffs, schlechtestes zuerst */
+  teams: number[];
+  /** Wie viel Prozent Chance auf Pick 1 jedes dieser Teams hatte (gleiche Reihenfolge) */
+  chancen: number[];
+  /** Pick-Nummern 1–4 wurden gelost: Team-IDs der ersten vier Picks */
+  gelost: number[];
+}
+
+export interface Offseason {
+  phase: OffseasonPhase;
+  /** Aufgehört haben (Spieler-IDs) */
+  ruhestand: number[];
+  /** Entwicklung: eigenes Team komplett, dazu die größten Sprünge nach oben und unten der Liga */
+  entwicklung: EntwicklungsZeile[];
+  lotterie: Lotterie | null;
+  /** Nächster Pick (Index 0–59 in der Pick-Reihenfolge); 60 = Draft beendet */
+  draftZeiger: number;
+  /** Verlängerte Verträge des eigenen Teams (vorläufige Regel bis Meilenstein 5b) */
+  vertraege: VertragsZeile[];
+}
+
+/** Scouting-Punkte der laufenden Saison und was der Spieler damit aufgedeckt hat. */
+export interface Scouting {
+  punkte: number;
+  /** Stufe 0–3 je Kandidat (Spieler-ID als Text) */
+  stufen: Record<string, number>;
 }
 
 // ---------- Play-In, Playoffs, Awards (ab Meilenstein 4b) ----------
@@ -440,6 +543,8 @@ export interface SpielDaten {
   karriere: Karriere;
   /** Abgeschlossene Saisons, älteste zuerst (ab Meilenstein 4b) */
   historie: SaisonRueckblick[];
+  /** Scouting-Punkte für die Draft-Kandidaten (ab Meilenstein 5) */
+  scouting: Scouting;
 }
 
 export interface Einstellungen {
@@ -465,6 +570,7 @@ export function neuesSpiel(
     posteingang: [],
     karriere: { ruf: 50, jobsicherheit: 60, ziele: [] },
     historie: [],
+    scouting: { punkte: CONFIG.offseason.scouting.punkteProSaison, stufen: {} },
   };
 }
 

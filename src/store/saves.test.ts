@@ -150,12 +150,33 @@ describe('SaveStore', () => {
     await db.saves.put({ slot: 3, version: 4, erstelltAm: 1, geaendertAm: 2, daten: m4 } as unknown as SaveRecord);
 
     const geladen = await store.laden(3);
-    expect(geladen?.version).toBe(5);
+    expect(geladen?.version).toBe(CONFIG.saveVersion);
     const d = geladen!.daten;
     expect(d.liga.spieler.every((s) => typeof s.neuling === 'boolean')).toBe(true);
     expect(d.karriere.ziele.length).toBeGreaterThan(0);
     expect(d.historie).toEqual([]);
     expect(d.liga.postseason?.phase).toBe('playin');
+  });
+
+  it('hebt einen Spielstand aus Meilenstein 4b (Format 5) auf Format 6: Draft-Picks, Kandidaten, Scouting', async () => {
+    const sp = structuredClone(spiel('Fuenf'));
+    simuliereZiel(sp, 'woche');
+    const m5 = structuredClone(sp) as unknown as Record<string, unknown>;
+    delete m5.scouting;
+    const l = m5.liga as Record<string, unknown>;
+    delete l.picks;
+    delete l.draftKlasse;
+    delete l.drafts;
+    await db.saves.put({ slot: 3, version: 5, erstelltAm: 1, geaendertAm: 2, daten: m5 } as unknown as SaveRecord);
+
+    const geladen = await store.laden(3);
+    expect(geladen?.version).toBe(6);
+    const d = geladen!.daten;
+    expect(d.scouting).toEqual({ punkte: CONFIG.offseason.scouting.punkteProSaison, stufen: {} });
+    expect(d.liga.picks).toHaveLength(4 * 60);
+    expect(d.liga.draftKlasse).toHaveLength(CONFIG.offseason.draft.kandidaten);
+    expect(d.liga.drafts).toEqual([]);
+    expect(d.liga.tag).toBe(sp.liga.tag);
   });
 });
 

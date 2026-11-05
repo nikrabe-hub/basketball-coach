@@ -73,10 +73,6 @@ export function PostseasonKarte({ spiel, onSimuliere, laeuft, fehler, onTab }: P
         <button className="knopf zweit abstand" onClick={() => onTab('liga')}>
           Awards, Tableau und Historie ansehen
         </button>
-        <p className="hinweis">
-          Hier endet die Saison vorerst. Draft, Vertragsverlängerungen, Free Agency und der Start der nächsten Saison folgen in
-          Meilenstein 5.
-        </p>
       </section>
     );
   }

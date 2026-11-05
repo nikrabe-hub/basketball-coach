@@ -206,3 +206,40 @@ export function erzeugeSpieler(rng: Rng, namen: NamenGenerator, vorgabe: Spieler
     neuling: alter <= gen.rookieAlterBis,
   };
 }
+
+export interface KandidatVorgabe {
+  id: number;
+  position: Position;
+  alter: number;
+  ovr: number;
+  pot: number;
+}
+
+/** Erzeugt einen Spieler mit vorgegebener OVR, POT und Alter (Draft-Kandidaten). Der Vertrag ist ein Platzhalter. */
+export function erzeugeSpielerMitWerten(rng: Rng, namen: NamenGenerator, v: KandidatVorgabe): Spieler {
+  const attribute = erzeugeAttribute(rng, v.position, v.ovr);
+  const ovr = berechneOvr(attribute, v.position);
+  const groesse = GROESSE[v.position];
+  const groesseCm = Math.round(rng.normal(groesse.mittel, groesse.abweichung));
+  const gewichtKg = Math.round((groesseCm - 100) * 0.9 + 8 + rng.normal(0, 5));
+  const name = namen.erzeuge(rng);
+  return {
+    id: v.id,
+    vorname: name.vorname,
+    nachname: name.nachname,
+    position: v.position,
+    groesseCm,
+    gewichtKg,
+    alter: v.alter,
+    nationalitaet: name.nationalitaet,
+    attribute,
+    persoenlichkeit: erzeugePersoenlichkeit(rng),
+    ovr,
+    pot: begrenze(Math.max(ovr, v.pot), ovr, CONFIG.spieler.attributMax),
+    vertrag: { gehalt: CONFIG.finanzen.mindestGehalt, jahre: 1 },
+    teamId: null,
+    moral: CONFIG.moral.start,
+    verletzung: null,
+    neuling: false,
+  };
+}
