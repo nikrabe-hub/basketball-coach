@@ -144,7 +144,6 @@ export const CONFIG = {
       asien: 5,
     },
     /** Markt der Teams (relative Gewichte) und Budget in Dollar je Markt */
-    marktGewichte: { klein: 35, mittel: 40, gross: 25 },
     budget: {
       klein: { min: 90_000_000, max: 120_000_000 },
       mittel: { min: 120_000_000, max: 160_000_000 },

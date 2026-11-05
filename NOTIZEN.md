@@ -59,6 +59,14 @@ Entscheidungen, offene Punkte und bekannte Bugs. Bei neuen Sitzungen zuerst lese
 - **Besitzer-Ziele und Jobsicherheit** (`karriere.ts`): Erwartung aus Teamstärke-Rang und Besitzer-Typ; Ziel "Siege" und optional "Playoff-Runde". Nach den Finals wird bewertet: Jobsicherheit und Coach-Ruf ändern sich, Eintrag in die Historie, wichtige Nachricht. **Keine Entlassung** vor Meilenstein 6.
 - Alle Zahlen in `config.ts` (`awards`, `karriere`, `spiel.rotation.standardMinutenPlayoffs`).
 
+## Teamnamen (nach M4b geändert, Wunsch des Nutzers)
+
+- Statt erfundener Städte jetzt **echte US-Städte** (Boston, New York, ..., Las Vegas). Spitznamen, Kürzel und Farben bleiben **frei erfunden** (keine echten NBA-Namen, z. B. "Boston Harbormen"). Das weicht bewusst vom Brief ab ("Fiktive Städte"), auf Wunsch des Nutzers.
+- Conferences/Divisionen folgen grob der Geografie (Ost/West, Nord/Zentral/Süd, je 5 Teams).
+- Der **Markt** ist jetzt fest an die Stadtgröße gekoppelt (8 groß, 12 mittel, 10 klein) statt zufällig; `marktGewichte` in `config.ts` entfällt.
+- Gilt nur für **neue Spiele**. Bestehende Spielstände behalten ihre alten Namen (Boxscores und Spielstand-Liste speichern Namen als Text).
+- Folge: gleicher Seed erzeugt jetzt eine andere Liga als vorher.
+
 ## Geprüft (Meilenstein 4b)
 
 - `npm test`: 114 Tests grün (Tiebreaker, Play-In, Bracket, Heimrecht, Serienende, Ziele, Awards, Migration 4->5, Simulation in Etappen).
